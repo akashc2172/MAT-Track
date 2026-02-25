@@ -309,9 +309,9 @@ export function calculateDynamicMetrics(af, reportingMonth) {
 
     af.mentorships.forEach(m => {
         const hsf = m.hsfName || 'Unknown HSF';
-        if (String(m.milestones?.fafsa).toLowerCase().includes('not started') || String(m.milestones?.fafsa).toLowerCase().includes('missing')) missingFafsas.push(hsf);
-        if (String(m.milestones?.css).toLowerCase().includes('not started') || String(m.milestones?.css).toLowerCase().includes('missing')) missingCsses.push(hsf);
-        if (String(m.milestones?.collegeApp).toLowerCase().includes('not started') || String(m.milestones?.collegeApp).toLowerCase().includes('missing')) missingApps.push(hsf);
+        if (!m.milestones?.fafsa || String(m.milestones.fafsa).toLowerCase().includes('not started') || String(m.milestones.fafsa).toLowerCase().includes('missing')) missingFafsas.push(hsf);
+        if (!m.milestones?.css || String(m.milestones.css).toLowerCase().includes('not started') || String(m.milestones.css).toLowerCase().includes('missing')) missingCsses.push(hsf);
+        if (!m.milestones?.collegeApp || String(m.milestones.collegeApp).toLowerCase().includes('not started') || String(m.milestones.collegeApp).toLowerCase().includes('missing')) missingApps.push(hsf);
 
         Object.entries(m.statuses).forEach(([month, status]) => {
             if (isExcluded(status)) return;
