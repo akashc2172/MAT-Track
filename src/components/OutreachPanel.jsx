@@ -435,7 +435,7 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
             return hasAnyMissing;
         });
 
-        const headers = ["Email", "FirstName", "FullName", "Subject", "Message", "CC", "AssignedHAF", "QualityAssessment"];
+        const headers = ["Email", "FirstName", "FullName", "Subject", "Message", "CC", "Assigned HAF", "Quality Assessment"];
 
         const csvEscape = (value) => {
             const str = value == null ? '' : String(value);
@@ -453,8 +453,9 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
             csvEscape(af.qa_status)
         ]);
 
-        const csvContent = [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const csvContent = [headers.join(","), ...rows.map(e => e.join(","))].join("\r\n");
+        const BOM = '\uFEFF';
+        const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.setAttribute("href", url);
