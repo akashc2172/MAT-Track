@@ -8,12 +8,8 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
     const [subject, setSubject] = useState("Missing Requirements Update");
     const [ccs, setCcs] = useState([""]);
     const [recentlyCopied, setRecentlyCopied] = useState(new Set());
-    const [isConfirmed, setIsConfirmed] = useState(false);
+    const [showExportModal, setShowExportModal] = useState(false);
     const textareaRef = useRef(null);
-
-    React.useEffect(() => {
-        setIsConfirmed(false);
-    }, [message, subject, ccs]);
 
     // Apply the same global filters to the Outreach selection
     const filteredData = useMemo(() => {
@@ -424,11 +420,15 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
         }
     };
 
-    const exportCSV = () => {
+    const triggerExportFlow = () => {
         if (selectedCount === 0 || validationResults.failed > 0) {
             alert("Validation failed. Please fix message errors before exporting.");
             return;
         }
+        setShowExportModal(true);
+    };
+
+    const confirmAndExportCSV = () => {
 
         const validAFs = filteredData.filter(af => {
             const hasAnyMissing = !getReplacedMessage(af, false).includes('[NO MISSING OBLIGATIONS MATCHING FILTERS]');
@@ -462,6 +462,7 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        setShowExportModal(false);
     };
 
     const insertVariable = (variable) => {
@@ -665,13 +666,6 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                             value={message}
                             onChange={e => setMessage(e.target.value)}
                         />
-                        <button
-                            className={`btn ${isConfirmed ? 'success' : 'btn-primary'}`}
-                            style={{ alignSelf: 'flex-start', padding: '8px 16px', marginTop: '8px', opacity: isConfirmed ? 0.8 : 1 }}
-                            onClick={() => setIsConfirmed(true)}
-                        >
-                            {isConfirmed ? <><CheckCircle size={16} /> Mail Merge Data Confirmed</> : 'Confirm Mail Merge Updates'}
-                        </button>
                     </div>
                 </div>
             </div>
@@ -876,8 +870,8 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                     <p className="text-muted" style={{ fontSize: '12px', margin: 0 }}>Export the finalized set list for bulk mailing.</p>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        <button className="btn btn-primary" onClick={exportCSV} style={{ justifyContent: 'center' }} disabled={validationResults.failed > 0 || !isConfirmed}>
-                            <Download size={16} /> {isConfirmed ? 'Mail Merge (.csv)' : 'Must Confirm Body First'}
+                        <button className="btn btn-primary" onClick={triggerExportFlow} style={{ justifyContent: 'center' }} disabled={validationResults.failed > 0}>
+                            <Download size={16} /> Mail Merge (.csv)
                         </button>
                         <button className="btn" onClick={() => copyGeneral(getBccList())} style={{ justifyContent: 'center' }} disabled={validationResults.failed > 0}>
                             <Copy size={16} /> Copy BCC Field
@@ -888,6 +882,48 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                     </div>
                 </div>
             </div >
+
+            {/* Export Verification Modal */}
+            {showExportModal && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999 }}>
+                    <div className="card" style={{ padding: '32px', maxWidth: '600px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+                        <h3 style={{ marginTop: 0, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <CheckCircle size={20} color="var(--accent-cyan)" /> Verify Mail Merge Details
+                        </h3>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '13px', lineHeight: 1.5, marginBottom: '24px' }}>
+                            Please review your global configuration before downloading the CSV. These values will be applied to all {selectedCount} recipients in your export.
+                        </p>
+
+                        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '16px', marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            <div>
+                                <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>SUBJECT LINE</span>
+                                <div style={{ fontSize: '14px', color: 'var(--text-primary)', fontWeight: '500' }}>{subject}</div>
+                            </div>
+
+                            {ccs.filter(c => c.trim() !== "").length > 0 && (
+                                <div>
+                                    <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>CC ADDRESSES</span>
+                                    <div style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{ccs.filter(c => c.trim() !== "").join(', ')}</div>
+                                </div>
+                            )}
+
+                            <div>
+                                <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>EMAIL BODY TEMPLATE</span>
+                                <div style={{ fontSize: '13px', color: 'var(--text-primary)', background: 'rgba(0,0,0,0.1)', padding: '12px', borderRadius: '4px', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
+                                    {message}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                            <button className="btn" onClick={() => setShowExportModal(false)}>Cancel & Go Back</button>
+                            <button className="btn success" onClick={confirmAndExportCSV} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Download size={16} /> Confirm & Download CSV
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div >
     );
 }
