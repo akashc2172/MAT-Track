@@ -217,8 +217,7 @@ export default function MasterTable({ data, filters, setFilters, reportingMonth 
                                     style={{
                                         cursor: hasHsfs ? 'pointer' : 'default',
                                         background: isExpanded ? 'rgba(255,255,255,0.02)' : 'transparent',
-                                        transition: 'background 0.2s',
-                                        opacity: af.last_contact_date ? 0.4 : 1
+                                        transition: 'background 0.2s'
                                     }}
                                     onClick={() => hasHsfs && toggleRow(af.email)}
                                 >
