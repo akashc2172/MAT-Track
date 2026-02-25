@@ -5,6 +5,8 @@ import { db } from '../utils/db.js';
 export default function OutreachPanel({ data, filters, reportingMonth }) {
     const [message, setMessage] = useState("Hi {FirstName},\n\nYou are currently missing {MissingSummary}.\n\nPlease submit this as soon as possible!");
     const [scheduledDate, setScheduledDate] = useState("");
+    const [subject, setSubject] = useState("Missing Requirements Update");
+    const [cc, setCc] = useState("");
     const [recentlyCopied, setRecentlyCopied] = useState(new Set());
     const textareaRef = useRef(null);
 
@@ -424,17 +426,26 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
         }
 
         const validAFs = filteredData.filter(af => {
-            return (af.action_flags || []).length > 0 || af.has_missing_fafsa || af.has_missing_css || af.has_missing_college_app;
+            const hasAnyMissing = !getReplacedMessage(af, false).includes('[NO MISSING OBLIGATIONS MATCHING FILTERS]');
+            return hasAnyMissing;
         });
 
-        const headers = ["Email", "FullName", "PreferredName", "AssignedHAF", "QualityAssessment", "Message"];
+        const headers = ["Email", "FirstName", "FullName", "Subject", "Message", "CC", "AssignedHAF", "QualityAssessment"];
+
+        const csvEscape = (value) => {
+            const str = value == null ? '' : String(value);
+            return `"${str.replace(/"/g, '""')}"`;
+        };
+
         const rows = validAFs.map(af => [
-            af.email,
-            `"${af.fullName}"`,
-            `"${af.preferredName}"`,
-            `"${af.assigned_haf}"`,
-            `"${af.qa_status}"`,
-            `"${getReplacedMessage(af).replace(/"/g, '""')}"`
+            csvEscape(af.email),
+            csvEscape(af.preferredName || (af.fullName || '').split(' ')[0] || ''),
+            csvEscape(af.fullName),
+            csvEscape(subject),
+            csvEscape(getReplacedMessage(af, true)),
+            csvEscape(cc),
+            csvEscape(af.assigned_haf),
+            csvEscape(af.qa_status)
         ]);
 
         const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
@@ -571,6 +582,39 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                                     ))}
                                 </div>
                             </details>
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '16px', marginBottom: '8px' }}>
+                        <div style={{ flex: 1 }}>
+                            <label style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Subject Line</label>
+                            <input
+                                type="text"
+                                style={{
+                                    width: '100%', padding: '8px 12px',
+                                    background: 'var(--bg-main)', color: 'var(--text-primary)',
+                                    border: '1px solid var(--border-color)', borderRadius: '6px',
+                                    fontFamily: 'inherit', fontSize: '13px'
+                                }}
+                                value={subject}
+                                onChange={e => setSubject(e.target.value)}
+                                placeholder="e.g. Missing Requirements Update"
+                            />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                            <label style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>CC (Optional)</label>
+                            <input
+                                type="text"
+                                style={{
+                                    width: '100%', padding: '8px 12px',
+                                    background: 'var(--bg-main)', color: 'var(--text-primary)',
+                                    border: '1px solid var(--border-color)', borderRadius: '6px',
+                                    fontFamily: 'inherit', fontSize: '13px'
+                                }}
+                                value={cc}
+                                onChange={e => setCc(e.target.value)}
+                                placeholder="e.g. manager@example.com"
+                            />
                         </div>
                     </div>
 
