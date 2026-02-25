@@ -267,7 +267,7 @@ function App() {
 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '24px', maxWidth: '800px', margin: '0 auto 24px auto' }}>
           <p style={{ fontSize: '15px', color: 'var(--text-primary)', marginBottom: '16px', textAlign: 'center', fontWeight: '500', lineHeight: '1.5' }}>
-            Just change the filters above, and hopefully the way I made this, it will automatically adjust the message once you click "Outreach Workspace" and make sense grammatically. Scroll all the way down to the previews for different AFs to see if it makes sense.
+            Just change the filters above, and hopefully the way I made this, it will automatically adjust the message once you click "Outreach Workspace" and make sense grammatically. Scroll all the way down to the previews (once in Outreach Workspace) for different AFs to see if it makes sense.
           </p>
           <nav style={{ display: 'flex', gap: '4px', background: 'var(--bg-card)', padding: '6px', borderRadius: '8px', border: '1px solid var(--border-color)', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
             <button
