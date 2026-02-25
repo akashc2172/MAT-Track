@@ -38,6 +38,29 @@ export default function MasterTable({ data, filters, setFilters, reportingMonth 
         });
     };
 
+    const toggleSelectAll = (e) => {
+        const canManuallySelect = (filters?.flags || []).length === 0;
+        if (!canManuallySelect) return;
+
+        const allVisibleEmails = processedData.map(af => af.email);
+        const currentSelected = filters?.manualSelected || [];
+        const allAreSelected = allVisibleEmails.every(email => currentSelected.includes(email));
+
+        setFilters(prev => {
+            let nextSelected = [...(prev.manualSelected || [])];
+            if (allAreSelected) {
+                // Deselect all that are currently visible
+                nextSelected = nextSelected.filter(email => !allVisibleEmails.includes(email));
+            } else {
+                // Add all visible that aren't already selected
+                allVisibleEmails.forEach(email => {
+                    if (!nextSelected.includes(email)) nextSelected.push(email);
+                });
+            }
+            return { ...prev, manualSelected: nextSelected };
+        });
+    };
+
     const toggleRow = (email) => {
         setExpandedRows(prev => {
             const next = new Set(prev);
@@ -181,18 +204,30 @@ export default function MasterTable({ data, filters, setFilters, reportingMonth 
         <div className="table-container databallr-table" style={{ overflowX: 'hidden' }}>
             <table style={{ width: '100%', tableLayout: 'fixed' }}>
                 <colgroup>
-                    <col style={{ width: '24%' }} />
+                    <col style={{ width: '22%' }} />
+                    <col style={{ width: '4%' }} />
                     <col style={{ width: '13%' }} />
                     <col style={{ width: '9%' }} />
+                    <col style={{ width: '10%' }} />
+                    <col style={{ width: '10%' }} />
                     <col style={{ width: '12%' }} />
                     <col style={{ width: '12%' }} />
-                    <col style={{ width: '11%' }} />
-                    <col style={{ width: '11%' }} />
                     <col style={{ width: '8%' }} />
                 </colgroup>
                 <thead>
                     <tr>
                         <th onClick={() => handleSort('fullName')} style={{ cursor: 'pointer' }}>AF Name</th>
+                        <th style={{ textAlign: 'center', padding: '0' }}>
+                            {(filters?.flags || []).length === 0 && (
+                                <input
+                                    type="checkbox"
+                                    style={{ cursor: 'pointer', accentColor: 'var(--accent-cyan)' }}
+                                    checked={processedData.length > 0 && processedData.every(af => (filters?.manualSelected || []).includes(af.email))}
+                                    onChange={toggleSelectAll}
+                                    title="Select/Deselect All"
+                                />
+                            )}
+                        </th>
                         <th onClick={() => handleSort('assigned_haf')} style={{ cursor: 'pointer' }}>HAF</th>
                         <th onClick={() => handleSort('qa_status')} style={{ cursor: 'pointer' }}>QA</th>
                         <th onClick={() => handleSort('current_session_pct')} style={{ cursor: 'pointer', textAlign: 'center' }}>This Month Sessions</th>
@@ -251,6 +286,18 @@ export default function MasterTable({ data, filters, setFilters, reportingMonth 
                                         </div>
                                     </td>
 
+                                    <td style={{ textAlign: 'center' }}>
+                                        {canManuallySelect && (
+                                            <input
+                                                type="checkbox"
+                                                checked={isManuallySelected}
+                                                onChange={(e) => toggleManualSelect(e, af.email)}
+                                                onClick={(e) => e.stopPropagation()}
+                                                style={{ cursor: 'pointer', accentColor: 'var(--accent-cyan)' }}
+                                            />
+                                        )}
+                                    </td>
+
                                     <td title={af.assigned_haf || 'Unassigned'}>
                                         <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100px', fontSize: '11px', color: 'var(--text-muted)' }}>
                                             {af.assigned_haf || 'Unassigned'}
@@ -292,7 +339,7 @@ export default function MasterTable({ data, filters, setFilters, reportingMonth 
                                 {/* Stratified Expansion Row */}
                                 {isExpanded && hasHsfs && (
                                     <tr style={{ background: 'var(--bg-main)' }}>
-                                        <td colSpan={8} style={{ padding: '0' }}>
+                                        <td colSpan={9} style={{ padding: '0' }}>
                                             <div style={{ padding: '16px 20px 24px 44px', borderLeft: '2px solid var(--accent-cyan)', background: 'rgba(0,0,0,0.1)' }}>
 
                                                 <h4 style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '12px', fontWeight: '800' }}>Assigned Students ({af.mentorships.length})</h4>
