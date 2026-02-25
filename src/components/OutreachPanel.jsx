@@ -8,7 +8,12 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
     const [subject, setSubject] = useState("Missing Requirements Update");
     const [ccs, setCcs] = useState([""]);
     const [recentlyCopied, setRecentlyCopied] = useState(new Set());
+    const [isConfirmed, setIsConfirmed] = useState(false);
     const textareaRef = useRef(null);
+
+    React.useEffect(() => {
+        setIsConfirmed(false);
+    }, [message, subject, ccs]);
 
     // Apply the same global filters to the Outreach selection
     const filteredData = useMemo(() => {
@@ -647,17 +652,27 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                         </div>
                     </div>
 
-                    <textarea
-                        ref={textareaRef}
-                        style={{
-                            width: '100%', minHeight: '120px', padding: '16px',
-                            background: 'var(--bg-main)', color: 'var(--text-primary)',
-                            border: '1px solid var(--border-color)', borderRadius: '6px',
-                            fontFamily: 'inherit', fontSize: '13px', resize: 'vertical'
-                        }}
-                        value={message}
-                        onChange={e => setMessage(e.target.value)}
-                    />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-muted)', display: 'block' }}>Email Body</label>
+                        <textarea
+                            ref={textareaRef}
+                            style={{
+                                width: '100%', minHeight: '120px', padding: '16px',
+                                background: 'var(--bg-main)', color: 'var(--text-primary)',
+                                border: '1px solid var(--border-color)', borderRadius: '6px',
+                                fontFamily: 'inherit', fontSize: '13px', resize: 'vertical'
+                            }}
+                            value={message}
+                            onChange={e => setMessage(e.target.value)}
+                        />
+                        <button
+                            className={`btn ${isConfirmed ? 'success' : 'btn-primary'}`}
+                            style={{ alignSelf: 'flex-start', padding: '8px 16px', marginTop: '8px', opacity: isConfirmed ? 0.8 : 1 }}
+                            onClick={() => setIsConfirmed(true)}
+                        >
+                            {isConfirmed ? <><CheckCircle size={16} /> Mail Merge Data Confirmed</> : 'Confirm Mail Merge Updates'}
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -861,8 +876,8 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                     <p className="text-muted" style={{ fontSize: '12px', margin: 0 }}>Export the finalized set list for bulk mailing.</p>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        <button className="btn btn-primary" onClick={exportCSV} style={{ justifyContent: 'center' }} disabled={validationResults.failed > 0}>
-                            <Download size={16} /> Mail Merge (.csv)
+                        <button className="btn btn-primary" onClick={exportCSV} style={{ justifyContent: 'center' }} disabled={validationResults.failed > 0 || !isConfirmed}>
+                            <Download size={16} /> {isConfirmed ? 'Mail Merge (.csv)' : 'Must Confirm Body First'}
                         </button>
                         <button className="btn" onClick={() => copyGeneral(getBccList())} style={{ justifyContent: 'center' }} disabled={validationResults.failed > 0}>
                             <Copy size={16} /> Copy BCC Field
