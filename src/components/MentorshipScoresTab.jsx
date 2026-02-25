@@ -20,6 +20,18 @@ const StatCell = ({ value, label, color }) => (
 export default function MentorshipScoresTab({ data, filters, reportingMonth }) {
     const [expandedRows, setExpandedRows] = useState(new Set());
     const [selectedStudents, setSelectedStudents] = useState({});
+    const [sortConfig, setSortConfig] = useState({ key: 'urgency_score', direction: 'desc' });
+
+    const handleSort = (key) => {
+        setSortConfig(prev => {
+            if (prev.key === key) {
+                return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+            }
+            let defaultDir = 'desc';
+            if (key === 'fullName') defaultDir = 'asc';
+            return { key, direction: defaultDir };
+        });
+    };
 
     // Color filters
     const [activeColors, setActiveColors] = useState({
@@ -79,9 +91,31 @@ export default function MentorshipScoresTab({ data, filters, reportingMonth }) {
             });
         }
 
-        // Default sort by Urgency for this view as well
-        return filtered.sort((a, b) => (b.urgency_score || 0) - (a.urgency_score || 0));
-    }, [data, filters, activeColors, reportingMonth]);
+        // Apply Sorting
+        return filtered.sort((a, b) => {
+            let valA, valB;
+            switch (sortConfig.key) {
+                case 'fullName':
+                    valA = a.fullName || a.email || '';
+                    valB = b.fullName || b.email || '';
+                    return sortConfig.direction === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+                case 'students':
+                    valA = a.mentorships?.length || 0;
+                    valB = b.mentorships?.length || 0;
+                    return sortConfig.direction === 'asc' ? valA - valB : valB - valA;
+                case 'flags':
+                    valA = (a.action_flags || []).length;
+                    valB = (b.action_flags || []).length;
+                    return sortConfig.direction === 'asc' ? valA - valB : valB - valA;
+                case 'urgency_score':
+                case 'metrics':
+                default:
+                    valA = a.urgency_score || 0;
+                    valB = b.urgency_score || 0;
+                    return sortConfig.direction === 'asc' ? valA - valB : valB - valA;
+            }
+        });
+    }, [data, filters, activeColors, reportingMonth, sortConfig]);
 
 
     return (
@@ -131,9 +165,18 @@ export default function MentorshipScoresTab({ data, filters, reportingMonth }) {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                     <thead>
                         <tr style={{ background: 'var(--bg-hover)', borderBottom: '2px solid var(--border-color)', textAlign: 'left' }}>
-                            <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: '600' }}>Advising Fellow</th>
-                            <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: '600', width: '25%' }}>Students</th>
-                            <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: '600', textAlign: 'center' }}>Metrics</th>
+                            <th onClick={() => handleSort('fullName')} style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: '600', cursor: 'pointer', borderRight: '1px solid var(--border-color)' }}>
+                                Advising Fellow {sortConfig.key === 'fullName' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th onClick={() => handleSort('students')} style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: '600', width: '25%', cursor: 'pointer', borderRight: '1px solid var(--border-color)' }}>
+                                Students {sortConfig.key === 'students' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th onClick={() => handleSort('flags')} title="Number of missing tasks (e.g. Uncompleted Milestones, Missing Sessions) older than 48 hours" style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: '600', textAlign: 'center', cursor: 'pointer', borderRight: '1px solid var(--border-color)' }}>
+                                Flags {sortConfig.key === 'flags' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th onClick={() => handleSort('metrics')} title="Combined Urgency Score calculated from overdue timestamps, inactive duration, and QA items" style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: '600', textAlign: 'center', cursor: 'pointer', borderRight: '1px solid var(--border-color)' }}>
+                                Metrics {sortConfig.key === 'metrics' || sortConfig.key === 'urgency_score' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}
+                            </th>
                             <th style={{ padding: '12px 16px', width: '40px' }}></th>
                         </tr>
                     </thead>
@@ -155,11 +198,10 @@ export default function MentorshipScoresTab({ data, filters, reportingMonth }) {
                                         background: isExpanded ? 'var(--bg-hover)' : 'transparent',
                                         transition: 'background 0.2s ease'
                                     }}>
-                                        <td style={{ padding: '16px' }}>
+                                        <td style={{ padding: '16px', borderRight: '1px solid var(--border-color)' }}>
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                     <span style={{ fontWeight: '700', fontSize: '14px', color: 'var(--text-primary)' }}>{af.fullName}</span>
-                                                    {flagsCount > 0 && <span style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: '800' }}>{flagsCount} Flags</span>}
                                                 </div>
                                                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                                                     {af.assigned_haf}
@@ -168,14 +210,23 @@ export default function MentorshipScoresTab({ data, filters, reportingMonth }) {
                                                 </div>
                                             </div>
                                         </td>
-                                        <td style={{ padding: '16px' }}>
+                                        <td style={{ padding: '16px', borderRight: '1px solid var(--border-color)' }}>
                                             <div style={{ display: 'flex', gap: '24px' }}>
                                                 <StatCell value={activeStudents} label="Students" />
                                                 <StatCell value={`${fafsaCompleted}/${activeStudents}`} label="FAFSA" color="var(--accent-gold)" />
                                                 <StatCell value={`${Math.round(af.current_session_pct)}%`} label="Sess" color={getHeatmapColor(af.current_session_pct)} />
                                             </div>
                                         </td>
-                                        <td style={{ padding: '16px', textAlign: 'center' }}>
+                                        <td style={{ padding: '16px', textAlign: 'center', borderRight: '1px solid var(--border-color)' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'center' }}>
+                                                {flagsCount > 0 ? (
+                                                    <span style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', padding: '4px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: '800' }}>{flagsCount}</span>
+                                                ) : (
+                                                    <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>-</span>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td style={{ padding: '16px', textAlign: 'center', borderRight: '1px solid var(--border-color)' }}>
                                             <div style={{ display: 'flex', justifyContent: 'center' }}>
                                                 <div style={{
                                                     background: af.urgency_score >= 10 ? 'rgba(239, 68, 68, 0.1)' : af.urgency_score > 0 ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)',
@@ -200,7 +251,7 @@ export default function MentorshipScoresTab({ data, filters, reportingMonth }) {
                                     {/* Expanded Row */}
                                     {isExpanded && hasHsfs && (
                                         <tr style={{ background: 'var(--bg-main)' }}>
-                                            <td colSpan={5} style={{ padding: '0' }}>
+                                            <td colSpan={6} style={{ padding: '0' }}>
                                                 <div style={{ padding: '16px 20px 24px 44px', borderLeft: '2px solid var(--accent-cyan)', background: 'rgba(0,0,0,0.1)' }}>
 
                                                     <h4 style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '12px', fontWeight: '800' }}>Assigned Students ({af.mentorships.length})</h4>
