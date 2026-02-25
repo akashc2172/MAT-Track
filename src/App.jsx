@@ -242,7 +242,7 @@ function App() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '32px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '16px 0' }}>
             <div style={{ width: '20px', height: '20px', background: 'var(--accent-gold)', borderRadius: '4px' }}></div>
-            <h1 style={{ fontSize: '15px', fontWeight: '800', letterSpacing: '0.5px' }}>Mission Control</h1>
+            <h1 style={{ fontSize: '15px', fontWeight: '800', letterSpacing: '0.5px' }}>MAT-Track</h1>
           </div>
         </div>
 
