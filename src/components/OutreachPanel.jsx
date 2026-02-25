@@ -194,19 +194,30 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
         const isAll = activeFlags.length === 0;
 
         const buildSummary = (includeSessions, includeWebinars, includeActionItems) => {
-            // --- 1. SESSIONS ---
+            // --- 1. SESSIONS & NOT LIVE ---
             let sessionMonths = [];
+            let notLiveMonths = [];
             if (includeSessions) {
-                (af.action_flags || []).filter(f => f.type === 'session').forEach(f => {
+                (af.action_flags || []).forEach(f => {
                     let include = isAll;
-                    if (!include) {
-                        if (activeFlags.includes('missing_session') && f.month === reportingMonth) include = true;
-                        if (activeFlags.includes('missing_past_sessions') && f.month !== reportingMonth) include = true;
-                        if (activeFlags.includes(`session_${f.month}`)) include = true;
+                    if (f.type === 'session') {
+                        if (!include) {
+                            if (activeFlags.includes('missing_session') && f.month === reportingMonth) include = true;
+                            if (activeFlags.includes('missing_past_sessions') && f.month !== reportingMonth) include = true;
+                            if (activeFlags.includes(`session_${f.month}`)) include = true;
+                        }
+                        if (include && !sessionMonths.includes(f.month)) sessionMonths.push(f.month);
+                    } else if (f.type === 'session_not_live') {
+                        if (!include) {
+                            if (activeFlags.includes('not_live_session') && f.month === reportingMonth) include = true;
+                            if (activeFlags.includes('not_live_past_sessions') && f.month !== reportingMonth) include = true;
+                            if (activeFlags.includes(`not_live_${f.month}`)) include = true;
+                        }
+                        if (include && !notLiveMonths.includes(f.month)) notLiveMonths.push(f.month);
                     }
-                    if (include && !sessionMonths.includes(f.month)) sessionMonths.push(f.month);
                 });
                 sessionMonths.sort(sortMonths);
+                notLiveMonths.sort(sortMonths);
             }
 
             // --- 2. WEBINARS ---
@@ -293,13 +304,14 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
             let finalSummary = '';
             let baseClauses = [];
 
-            if (sessionMonths.length === 1 && friendlyWebinars.length === 1 && rawWebinars.length === 0 && sessionMonths[0] === friendlyWebinars[0] && actionClauses.length === 0) {
+            if (sessionMonths.length === 1 && notLiveMonths.length === 0 && friendlyWebinars.length === 1 && rawWebinars.length === 0 && sessionMonths[0] === friendlyWebinars[0] && actionClauses.length === 0) {
                 // Same-month Optimization
                 const m = sessionMonths[0];
                 const yearStr = ` ${getYearForMonth(m)}`;
                 baseClauses.push(`your ${m}${yearStr} session summary and webinar`);
             } else {
                 if (sessionMonths.length > 0) baseClauses.push(`your ${formatMonthList(sessionMonths)} session ${sessionMonths.length > 1 ? 'summaries' : 'summary'}`);
+                if (notLiveMonths.length > 0) baseClauses.push(`your ${formatMonthList(notLiveMonths)} session ${notLiveMonths.length > 1 ? 'summaries' : 'summary'} marked Completed - Not Live`);
                 if (webinarJoined) baseClauses.push(webinarJoined);
                 actionClauses.forEach(ac => baseClauses.push(ac));
             }
