@@ -176,6 +176,23 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
         return displayMonths.slice(0, -1).join(', ') + ', and ' + displayMonths[displayMonths.length - 1];
     }
 
+    function formatSessionMonthList(monthMap) {
+        const months = Object.keys(monthMap).sort(sortMonths);
+        if (months.length === 0) return '';
+        const uniqueYears = new Set(months.map(m => getYearForMonth(m)));
+        const sameYear = uniqueYears.size === 1;
+
+        let displayItems = months.map(m => {
+            const hsfs = Array.from(monthMap[m] || []).filter(Boolean).sort();
+            const hsfStr = hsfs.length > 0 ? ` (${hsfs.join(', ')})` : '';
+            return (!sameYear ? `${m} ${getYearForMonth(m)}` : m) + hsfStr;
+        });
+
+        if (displayItems.length === 1) return displayItems[0];
+        if (displayItems.length === 2) return `${displayItems[0]} and ${displayItems[1]}`;
+        return displayItems.slice(0, -1).join(', ') + ', and ' + displayItems[displayItems.length - 1];
+    }
+
     function getReplacedMessage(af, strict = true) {
         let msg = message;
 
@@ -195,8 +212,8 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
 
         const buildSummary = (includeSessions, includeWebinars, includeActionItems) => {
             // --- 1. SESSIONS & NOT LIVE ---
-            let sessionMonths = [];
-            let notLiveMonths = [];
+            let sessionMap = {};
+            let notLiveMap = {};
             if (includeSessions) {
                 (af.action_flags || []).forEach(f => {
                     let include = isAll;
@@ -206,19 +223,25 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                             if (activeFlags.includes('missing_past_sessions') && f.month !== reportingMonth) include = true;
                             if (activeFlags.includes(`session_${f.month}`)) include = true;
                         }
-                        if (include && !sessionMonths.includes(f.month)) sessionMonths.push(f.month);
+                        if (include) {
+                            if (!sessionMap[f.month]) sessionMap[f.month] = new Set();
+                            if (f.target) sessionMap[f.month].add(f.target);
+                        }
                     } else if (f.type === 'session_not_live') {
                         if (!include) {
                             if (activeFlags.includes('not_live_session') && f.month === reportingMonth) include = true;
                             if (activeFlags.includes('not_live_past_sessions') && f.month !== reportingMonth) include = true;
                             if (activeFlags.includes(`not_live_${f.month}`)) include = true;
                         }
-                        if (include && !notLiveMonths.includes(f.month)) notLiveMonths.push(f.month);
+                        if (include) {
+                            if (!notLiveMap[f.month]) notLiveMap[f.month] = new Set();
+                            if (f.target) notLiveMap[f.month].add(f.target);
+                        }
                     }
                 });
-                sessionMonths.sort(sortMonths);
-                notLiveMonths.sort(sortMonths);
             }
+            const sessionMonthsArr = Object.keys(sessionMap).sort(sortMonths);
+            const notLiveMonthsArr = Object.keys(notLiveMap).sort(sortMonths);
 
             // --- 2. WEBINARS ---
             let webinarNames = [];
@@ -304,14 +327,16 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
             let finalSummary = '';
             let baseClauses = [];
 
-            if (sessionMonths.length === 1 && notLiveMonths.length === 0 && friendlyWebinars.length === 1 && rawWebinars.length === 0 && sessionMonths[0] === friendlyWebinars[0] && actionClauses.length === 0) {
+            if (sessionMonthsArr.length === 1 && notLiveMonthsArr.length === 0 && friendlyWebinars.length === 1 && rawWebinars.length === 0 && sessionMonthsArr[0] === friendlyWebinars[0] && actionClauses.length === 0) {
                 // Same-month Optimization
-                const m = sessionMonths[0];
+                const m = sessionMonthsArr[0];
                 const yearStr = ` ${getYearForMonth(m)}`;
-                baseClauses.push(`your ${m}${yearStr} session summary and webinar`);
+                const hsfs = Array.from(sessionMap[m] || []).filter(Boolean).sort();
+                const hsfStr = hsfs.length > 0 ? ` (${hsfs.join(', ')})` : '';
+                baseClauses.push(`your ${m}${yearStr}${hsfStr} session summary and webinar`);
             } else {
-                if (sessionMonths.length > 0) baseClauses.push(`your ${formatMonthList(sessionMonths)} session ${sessionMonths.length > 1 ? 'summaries' : 'summary'}`);
-                if (notLiveMonths.length > 0) baseClauses.push(`your ${formatMonthList(notLiveMonths)} session ${notLiveMonths.length > 1 ? 'summaries' : 'summary'} marked Completed - Not Live`);
+                if (sessionMonthsArr.length > 0) baseClauses.push(`your ${formatSessionMonthList(sessionMap)} session ${sessionMonthsArr.length > 1 ? 'summaries' : 'summary'}`);
+                if (notLiveMonthsArr.length > 0) baseClauses.push(`your ${formatSessionMonthList(notLiveMap)} session ${notLiveMonthsArr.length > 1 ? 'summaries' : 'summary'} marked Completed - Not Live`);
                 if (webinarJoined) baseClauses.push(webinarJoined);
                 actionClauses.forEach(ac => baseClauses.push(ac));
             }
@@ -346,14 +371,15 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
 
         // --- NOT LIVE SUMMARY AGGREGATION ---
         if (msg.includes('{NotLiveSessionsOnlySummary}')) {
-            const notLiveMonths = [];
+            const nlMap = {};
             (af.action_flags || []).filter(f => f.type === 'session_not_live').forEach(f => {
-                if (!notLiveMonths.includes(f.month)) notLiveMonths.push(f.month);
+                if (!nlMap[f.month]) nlMap[f.month] = new Set();
+                if (f.target) nlMap[f.month].add(f.target);
             });
-            notLiveMonths.sort(sortMonths);
-            if (notLiveMonths.length > 0) {
-                const monthStr = formatMonthList(notLiveMonths);
-                const suffix = notLiveMonths.length > 1 ? 'summaries marked Not Live' : 'summary marked Not Live';
+            const nlMonths = Object.keys(nlMap);
+            if (nlMonths.length > 0) {
+                const monthStr = formatSessionMonthList(nlMap);
+                const suffix = nlMonths.length > 1 ? 'summaries marked Not Live' : 'summary marked Not Live';
                 msg = msg.replace(/\{NotLiveSessionsOnlySummary\}/g, `your ${monthStr} session ${suffix}`);
             } else {
                 msg = msg.replace(/\{NotLiveSessionsOnlySummary\}/g, '[No Not Live Sessions]');
@@ -362,30 +388,46 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
 
         // --- GRANULAR FALLBACKS ---
         if (msg.includes('{MissingSessions_Current}')) {
-            const missing = (af.action_flags || []).filter(f => f.type === 'session' && f.month === reportingMonth).map(f => f.month);
-            msg = msg.replace(/\{MissingSessions_Current\}/g, missing.length > 0 ? `missing session for ${missing[0]}` : `[No Missing Session for ${reportingMonth}]`);
+            const missingList = (af.action_flags || []).filter(f => f.type === 'session' && f.month === reportingMonth);
+            if (missingList.length > 0) {
+                const map = { [reportingMonth]: new Set(missingList.map(f => f.target)) };
+                msg = msg.replace(/\{MissingSessions_Current\}/g, `missing session for ${formatSessionMonthList(map)}`);
+            } else {
+                msg = msg.replace(/\{MissingSessions_Current\}/g, `[No Missing Session for ${reportingMonth}]`);
+            }
         }
         if (msg.includes('{NotLiveSessions_Current}')) {
-            const nl = (af.action_flags || []).filter(f => f.type === 'session_not_live' && f.month === reportingMonth).map(f => f.month);
-            msg = msg.replace(/\{NotLiveSessions_Current\}/g, nl.length > 0 ? `session summary for ${nl[0]} marked Completed - Not Live` : `[No Not Live Session for ${reportingMonth}]`);
+            const nlList = (af.action_flags || []).filter(f => f.type === 'session_not_live' && f.month === reportingMonth);
+            if (nlList.length > 0) {
+                const map = { [reportingMonth]: new Set(nlList.map(f => f.target)) };
+                msg = msg.replace(/\{NotLiveSessions_Current\}/g, `session summary for ${formatSessionMonthList(map)} marked Completed - Not Live`);
+            } else {
+                msg = msg.replace(/\{NotLiveSessions_Current\}/g, `[No Not Live Session for ${reportingMonth}]`);
+            }
         }
 
         if (msg.includes('{MissingSessions_Past}')) {
-            const missing = (af.action_flags || []).filter(f => f.type === 'session' && f.month !== reportingMonth).map(f => f.month);
-            if (missing.length > 0) {
-                missing.sort(sortMonths);
-                const formatted = missing.length > 1 ? missing.slice(0, -1).join(', ') + ' and ' + missing[missing.length - 1] : missing[0];
-                msg = msg.replace(/\{MissingSessions_Past\}/g, `missing session ${missing.length > 1 ? 'summaries' : 'summary'} for ${formatted}`);
+            const map = {};
+            (af.action_flags || []).filter(f => f.type === 'session' && f.month !== reportingMonth).forEach(f => {
+                if (!map[f.month]) map[f.month] = new Set();
+                if (f.target) map[f.month].add(f.target);
+            });
+            const monthsArr = Object.keys(map).sort(sortMonths);
+            if (monthsArr.length > 0) {
+                msg = msg.replace(/\{MissingSessions_Past\}/g, `missing session ${monthsArr.length > 1 ? 'summaries' : 'summary'} for ${formatSessionMonthList(map)}`);
             } else {
                 msg = msg.replace(/\{MissingSessions_Past\}/g, '[No Missing Past Sessions]');
             }
         }
         if (msg.includes('{NotLiveSessions_Past}')) {
-            const nl = (af.action_flags || []).filter(f => f.type === 'session_not_live' && f.month !== reportingMonth).map(f => f.month);
-            if (nl.length > 0) {
-                nl.sort(sortMonths);
-                const formatted = nl.length > 1 ? nl.slice(0, -1).join(', ') + ' and ' + nl[nl.length - 1] : nl[0];
-                msg = msg.replace(/\{NotLiveSessions_Past\}/g, `session ${nl.length > 1 ? 'summaries' : 'summary'} for ${formatted} marked Completed - Not Live`);
+            const map = {};
+            (af.action_flags || []).filter(f => f.type === 'session_not_live' && f.month !== reportingMonth).forEach(f => {
+                if (!map[f.month]) map[f.month] = new Set();
+                if (f.target) map[f.month].add(f.target);
+            });
+            const monthsArr = Object.keys(map).sort(sortMonths);
+            if (monthsArr.length > 0) {
+                msg = msg.replace(/\{NotLiveSessions_Past\}/g, `session ${monthsArr.length > 1 ? 'summaries' : 'summary'} for ${formatSessionMonthList(map)} marked Completed - Not Live`);
             } else {
                 msg = msg.replace(/\{NotLiveSessions_Past\}/g, '[No Not Live Past Sessions]');
             }
@@ -394,14 +436,24 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
         allMonths.forEach(month => {
             const tag = `{Missing_${month}}`;
             if (msg.includes(tag)) {
-                const isMissing = (af.action_flags || []).some(f => f.type === 'session' && f.month === month);
-                msg = msg.replaceAll(tag, isMissing ? `session for ${month}` : `[No Missing ${month} Session]`);
+                const list = (af.action_flags || []).filter(f => f.type === 'session' && f.month === month);
+                if (list.length > 0) {
+                    const map = { [month]: new Set(list.map(f => f.target)) };
+                    msg = msg.replaceAll(tag, `session for ${formatSessionMonthList(map)}`);
+                } else {
+                    msg = msg.replaceAll(tag, `[No Missing ${month} Session]`);
+                }
             }
 
             const nlTag = `{NotLive_${month}}`;
             if (msg.includes(nlTag)) {
-                const isNL = (af.action_flags || []).some(f => f.type === 'session_not_live' && f.month === month);
-                msg = msg.replaceAll(nlTag, isNL ? `session for ${month} marked Completed - Not Live` : `[No Not Live ${month} Session]`);
+                const list = (af.action_flags || []).filter(f => f.type === 'session_not_live' && f.month === month);
+                if (list.length > 0) {
+                    const map = { [month]: new Set(list.map(f => f.target)) };
+                    msg = msg.replaceAll(nlTag, `session for ${formatSessionMonthList(map)} marked Completed - Not Live`);
+                } else {
+                    msg = msg.replaceAll(nlTag, `[No Not Live ${month} Session]`);
+                }
             }
         });
 
