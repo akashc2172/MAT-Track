@@ -259,15 +259,6 @@ export default function MasterTable({ data, filters, setFilters, reportingMonth 
                                     <td>
                                         <div className="stack-cell">
                                             <span className="stack-main" style={{ color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                {canManuallySelect && (
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={isManuallySelected}
-                                                        onChange={(e) => toggleManualSelect(e, af.email)}
-                                                        onClick={(e) => e.stopPropagation()}
-                                                        style={{ cursor: 'pointer', accentColor: 'var(--accent-cyan)' }}
-                                                    />
-                                                )}
                                                 {hasHsfs && (isExpanded ? <ChevronDown size={14} color="var(--accent-cyan)" /> : <ChevronRight size={14} color="var(--accent-cyan)" />)}
                                                 <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '140px' }} title={af.fullName || af.email}>
                                                     {af.fullName || af.email}
