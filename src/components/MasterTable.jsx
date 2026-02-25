@@ -109,6 +109,7 @@ export default function MasterTable({ data, filters, setFilters, reportingMonth 
                     if (flag === 'missing_past_webinars' && row.missing_past_webinars_count > 0) return true;
                     if (flag === 'missing_fafsa' && row.has_missing_fafsa) return true;
                     if (flag === 'missing_css' && row.has_missing_css) return true;
+                    if (flag === 'missing_college_app' && row.has_missing_college_app) return true;
 
                     if (flag.startsWith('session_')) {
                         const search = flag.replace('session_', '');

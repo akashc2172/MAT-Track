@@ -91,6 +91,45 @@ export default function MentorshipScoresTab({ data, filters, reportingMonth }) {
             });
         }
 
+        // Apply Flag Filters
+        if (filters?.flags?.length > 0) {
+            filtered = filtered.filter(row => {
+                return filters.flags.some(flag => {
+                    const flags = row.action_flags || [];
+
+                    if (flag === 'missing_session' && row.missing_sessions_count > 0) return true;
+                    if (flag === 'missing_past_sessions' && row.missing_past_sessions_count > 0) return true;
+                    if (flag === 'not_live_session' && row.not_live_sessions_count > 0) return true;
+                    if (flag === 'not_live_past_sessions' && row.not_live_past_sessions_count > 0) return true;
+                    if (flag === 'missing_webinar' && row.missing_webinars_count > 0) return true;
+                    if (flag === 'missing_past_webinars' && row.missing_past_webinars_count > 0) return true;
+                    if (flag === 'missing_fafsa' && row.has_missing_fafsa) return true;
+                    if (flag === 'missing_css' && row.has_missing_css) return true;
+                    if (flag === 'missing_college_app' && row.has_missing_college_app) return true;
+
+                    if (flag.startsWith('session_')) {
+                        const search = flag.replace('session_', '');
+                        if (flags.some(f => f.type === 'session' && f.month === search)) return true;
+                    }
+                    if (flag.startsWith('not_live_') && flag !== 'not_live_session' && flag !== 'not_live_past_sessions') {
+                        const search = flag.replace('not_live_', '');
+                        if (flags.some(f => f.type === 'session_not_live' && f.month === search)) return true;
+                    }
+                    if (flag.startsWith('webinar_')) {
+                        const search = flag.replace('webinar_', '');
+                        if (flags.some(f => f.type === 'webinar' && f.target === search)) return true;
+                    }
+                    if (flag.startsWith('afm_')) {
+                        const search = flag.replace('afm_', '');
+                        if (flags.some(f => f.type === 'afm' && f.target === search)) return true;
+                    }
+
+                    if (flag === 'inactive' && row.current_session_pct === 0 && row.current_webinar_pct === 0) return true;
+                    return false;
+                });
+            });
+        }
+
         // Apply Sorting
         return filtered.sort((a, b) => {
             let valA, valB;
