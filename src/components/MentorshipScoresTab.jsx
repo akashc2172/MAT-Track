@@ -171,11 +171,17 @@ export default function MentorshipScoresTab({ data, filters, reportingMonth }) {
                             <th onClick={() => handleSort('students')} style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: '600', width: '25%', cursor: 'pointer', borderRight: '1px solid var(--border-color)' }}>
                                 Students {sortConfig.key === 'students' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                             </th>
-                            <th onClick={() => handleSort('flags')} title="Number of missing tasks (e.g. Uncompleted Milestones, Missing Sessions) older than 48 hours" style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: '600', textAlign: 'center', cursor: 'pointer', borderRight: '1px solid var(--border-color)' }}>
-                                Flags {sortConfig.key === 'flags' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                            <th onClick={() => handleSort('flags')} style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: '600', textAlign: 'center', cursor: 'pointer', borderRight: '1px solid var(--border-color)' }}>
+                                <div className="tooltip-container">
+                                    Flags {sortConfig.key === 'flags' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                                    <span className="tooltip-text">Number of missing tasks (e.g. Uncompleted Milestones, Missing Sessions) older than 48 hours</span>
+                                </div>
                             </th>
-                            <th onClick={() => handleSort('metrics')} title="Combined Urgency Score calculated from overdue timestamps, inactive duration, and QA items" style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: '600', textAlign: 'center', cursor: 'pointer', borderRight: '1px solid var(--border-color)' }}>
-                                Metrics {sortConfig.key === 'metrics' || sortConfig.key === 'urgency_score' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}
+                            <th onClick={() => handleSort('metrics')} style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: '600', textAlign: 'center', cursor: 'pointer', borderRight: '1px solid var(--border-color)' }}>
+                                <div className="tooltip-container">
+                                    Metrics {sortConfig.key === 'metrics' || sortConfig.key === 'urgency_score' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}
+                                    <span className="tooltip-text">Combined Urgency Score calculated from overdue timestamps, inactive duration, and QA items</span>
+                                </div>
                             </th>
                             <th style={{ padding: '12px 16px', width: '40px' }}></th>
                         </tr>
