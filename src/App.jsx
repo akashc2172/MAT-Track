@@ -17,10 +17,12 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [showOutreachModal, setShowOutreachModal] = useState(false);
-  const [showResetModal, setShowResetModal] = useState(false);
+  const [showDataSourcesModal, setShowDataSourcesModal] = useState(false);
   const [uploads, setUploads] = useState({
     haf: null, qa: null, session: null, afm: null, webinar: null
   });
+
+  const persistedSources = useLiveQuery(() => db.sources.toArray());
 
   // Navigation State
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem('databallr_tab') || 'dashboard');
@@ -28,7 +30,7 @@ function App() {
   useEffect(() => { localStorage.setItem('databallr_tab', activeTab); }, [activeTab]);
 
   // UX Priority: Smart Defaults + Remembered Preferences
-  const [reportingMonth, setReportingMonth] = useState(() => localStorage.getItem('databallr_month') || 'February');
+  const [reportingMonth, setReportingMonth] = useState(() => localStorage.getItem('databallr_month') || new Date().toLocaleString('default', { month: 'long' }));
 
   const [filters, setFilters] = useState(() => {
     const saved = localStorage.getItem('databallr_filters');
@@ -77,16 +79,22 @@ function App() {
     setIsLoading(true);
     setErrorMsg('');
     try {
-      // Parse whichever files were uploaded. Missing files return empty arrays natively.
       const hafData = uploads.haf ? await parseFile(uploads.haf) : [];
       const qaData = uploads.qa ? await parseFile(uploads.qa) : [];
       const sessionData = uploads.session ? await parseFile(uploads.session) : [];
       const afmData = uploads.afm ? await parseFile(uploads.afm) : [];
       const webinarData = uploads.webinar ? await parseFile(uploads.webinar) : [];
 
-      // Generate normalized reports
-      const { data, stats } = unifyReports(hafData, qaData, sessionData, afmData, webinarData);
+      // Save raw data to Sources table for persistent replacement/sync
+      const sourcePromises = [];
+      if (uploads.haf) sourcePromises.push(db.sources.put({ id: 'haf', filename: uploads.haf.name, data: hafData }));
+      if (uploads.qa) sourcePromises.push(db.sources.put({ id: 'qa', filename: uploads.qa.name, data: qaData }));
+      if (uploads.session) sourcePromises.push(db.sources.put({ id: 'session', filename: uploads.session.name, data: sessionData }));
+      if (uploads.afm) sourcePromises.push(db.sources.put({ id: 'afm', filename: uploads.afm.name, data: afmData }));
+      if (uploads.webinar) sourcePromises.push(db.sources.put({ id: 'webinar', filename: uploads.webinar.name, data: webinarData }));
+      await Promise.all(sourcePromises);
 
+      const { data, stats } = unifyReports(hafData, qaData, sessionData, afmData, webinarData);
       setPendingData(data);
       setAuditStats(stats);
     } catch (err) {
@@ -97,22 +105,56 @@ function App() {
     }
   };
 
+  const handleSyncEngine = async (customSources = null) => {
+    setIsLoading(true);
+    try {
+      const sources = customSources || await db.sources.toArray();
+      const sMap = Object.fromEntries(sources.map(s => [s.id, s.data]));
+
+      const { data } = unifyReports(
+        sMap.haf || [],
+        sMap.qa || [],
+        sMap.session || [],
+        sMap.afm || [],
+        sMap.webinar || []
+      );
+
+      await db.afs.clear();
+      await db.afs.bulkAdd(data);
+      console.log("Engine re-synced from persistent sources.");
+    } catch (err) {
+      console.error(err);
+      alert("Sync failed: " + err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleReplaceFile = async (e, key) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setIsLoading(true);
+    try {
+      const parsedData = await parseFile(file);
+      await db.sources.put({ id: key, filename: file.name, data: parsedData });
+      await handleSyncEngine();
+      alert(`Updated ${key} source with ${file.name}`);
+    } catch (err) {
+      alert("Failed to replace file: " + err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleApproveData = async () => {
     try {
-      // Clear existing data for strict rewrite during dev
       await db.afs.clear();
-
-      // Store in IndexedDB
       await db.afs.bulkAdd(pendingData);
-      console.log("Normalized Data Model successfully committed to Dexie IndexedDB.");
-
-      // Wait a moment for Dexie useLiveQuery to propagate the new data to React state
-      // This prevents the Initialization Screen from flashing/catching context due to activeAfs being momentarily empty
       setTimeout(() => {
         setPendingData(null);
         setAuditStats(null);
       }, 400);
-
     } catch (error) {
       console.error("Failed to commit to IndexedDB: ", error);
       alert("Data commit failed: " + error.message);
@@ -216,18 +258,18 @@ function App() {
               ))}
             </select>
           </div>
-          <button className="btn" style={{ fontSize: '11px', borderColor: 'var(--danger)', color: 'var(--danger)' }} onClick={() => setShowResetModal(true)}>Data Management</button>
+          <button className="btn" style={{ fontSize: '11px', borderColor: 'var(--accent-cyan)', color: 'var(--accent-cyan)' }} onClick={() => setShowDataSourcesModal(true)}>Manage Data Sources</button>
         </div>
       </header>
 
       <main style={{ padding: '20px' }}>
         <FilterBar data={activeAfs} filters={filters} setFilters={setFilters} reportingMonth={reportingMonth} />
 
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '16px' }}>
-          <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px', textAlign: 'center', fontWeight: 'bold' }}>
-            Select filters above to choose who you want to contact, then open Outreach Workspace.
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '24px', maxWidth: '800px', margin: '0 auto 24px auto' }}>
+          <p style={{ fontSize: '15px', color: 'var(--text-primary)', marginBottom: '16px', textAlign: 'center', fontWeight: '500', lineHeight: '1.5' }}>
+            Just change the filters above, and hopefully the way I made this, it will automatically adjust the message to make sense grammatically. Scroll all the way down to the previews for different AFs to see if it makes sense.
           </p>
-          <nav style={{ display: 'flex', gap: '2px' }}>
+          <nav style={{ display: 'flex', gap: '4px', background: 'var(--bg-card)', padding: '6px', borderRadius: '8px', border: '1px solid var(--border-color)', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
             <button
               className={`tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
               onClick={() => handleTabSwitch('dashboard')}
@@ -271,43 +313,59 @@ function App() {
         </div>
       )}
 
-      {/* DB Reset Modal */}
-      {showResetModal && (
+      {/* Data Source Management Modal */}
+      {showDataSourcesModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999 }}>
-          <div className="card" style={{ padding: '32px', maxWidth: '400px', width: '100%' }}>
-            <h3 style={{ marginTop: 0, color: 'var(--text-primary)' }}>Data Management</h3>
+          <div className="card" style={{ padding: '32px', maxWidth: '550px', width: '100%' }}>
+            <h3 style={{ marginTop: 0, color: 'var(--text-primary)' }}>Manage Data Sources</h3>
             <p style={{ color: 'var(--text-muted)', fontSize: '13px', lineHeight: 1.5, marginBottom: '24px' }}>
-              Select which database records you'd like to clear from this browser session.
+              Replace individual data files to update the dashboard, or reset everything to start over.
             </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
-              <button className="btn" onClick={async () => { await db.afs.clear(); setShowResetModal(false); window.location.reload(); }} style={{ justifyContent: 'flex-start', color: 'var(--warning)', borderColor: 'var(--warning)' }}>
-                Clear Core Tracking Data (Return to Setup)
-              </button>
-              <button className="btn" onClick={async () => {
-                const allAfs = await db.afs.toArray();
-                await Promise.all(allAfs.map(a => db.afs.update(a.email, { last_contact_date: null })));
-                alert('Outreach logs cleared successfully.');
-                setShowResetModal(false);
-              }} style={{ justifyContent: 'flex-start' }}>
-                Clear Outreach Logs (Reset 'Contacted' flags)
-              </button>
-              <button className="btn" onClick={async () => {
-                await db.identityAliases.clear();
-                alert('Alias mappings cleared successfully.');
-                setShowResetModal(false);
-              }} style={{ justifyContent: 'flex-start' }}>
-                Clear Identity Aliases
-              </button>
-              <button className="btn btn-primary" onClick={async () => {
-                await Promise.all(db.tables.map(table => table.clear()));
-                setShowResetModal(false);
-                window.location.reload();
-              }} style={{ justifyContent: 'flex-start', background: 'var(--danger)', borderColor: 'var(--danger)' }}>
-                Nuke All Databases (Factory Reset)
-              </button>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '32px' }}>
+              {[
+                { id: 'haf', label: 'HAF Assignments' },
+                { id: 'qa', label: 'QA Tracker' },
+                { id: 'session', label: 'Session Summaries' },
+                { id: 'webinar', label: 'Webinar Export' },
+                { id: 'afm', label: 'AFM Completion' }
+              ].map(slot => {
+                const source = persistedSources?.find(s => s.id === slot.id);
+                return (
+                  <div key={slot.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-card)', padding: '12px 16px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: '13px' }}>{slot.label}</h4>
+                      <p style={{ margin: '2px 0 0 0', fontSize: '11px', color: source ? 'var(--success)' : 'var(--text-muted)' }}>
+                        {source ? `✓ ${source.filename}` : 'No file uploaded'}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="btn" style={{ fontSize: '11px', padding: '6px 12px', cursor: 'pointer', display: 'inline-block' }}>
+                        {source ? 'Replace' : 'Upload'}
+                        <input type="file" style={{ display: 'none' }} onChange={(e) => handleReplaceFile(e, slot.id)} />
+                      </label>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button className="btn" onClick={() => setShowResetModal(false)}>Cancel / Close</button>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <button
+                className="btn"
+                style={{ borderColor: 'var(--danger)', color: 'var(--danger)', fontSize: '12px' }}
+                onClick={async () => {
+                  if (confirm("This will wipe ALL data and return you to the Setup screen. Proceed?")) {
+                    await Promise.all(db.tables.map(table => table.clear()));
+                    window.location.reload();
+                  }
+                }}
+              >
+                Reset All & Return to Setup
+              </button>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button className="btn" onClick={() => setShowDataSourcesModal(false)}>Close</button>
+              </div>
             </div>
           </div>
         </div>

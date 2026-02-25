@@ -253,3 +253,28 @@ tr:hover {
   color: var(--text-muted);
   font-weight: 800;
 }
+
+/* Custom Tabs */
+.tab-btn {
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  padding: 8px 24px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.tab-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.tab-btn.active {
+  background: var(--accent-cyan);
+  color: #000;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}

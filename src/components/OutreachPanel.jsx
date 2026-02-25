@@ -61,31 +61,52 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
 
     const mostRecentMonth = allMonths.length > 0 ? allMonths[allMonths.length - 1] : null;
 
-    // --- Validation Rules ---
     const validationResults = useMemo(() => {
         const results = { passed: 0, failed: 0, skipped: 0, failures: [] };
         if (!filteredData || filteredData.length === 0) return results;
 
-        filteredData.forEach(af => {
-            // Check if they even have missing obligations at all
-            const hasAnyMissing = (af.action_flags || []).length > 0 || af.has_missing_fafsa || af.has_missing_css || af.has_missing_college_app;
-            if (!hasAnyMissing) {
-                results.skipped++;
-                return; // They are a No-Op, so they don't fail, they just get skipped
-            }
+        const allSupportedTokens = [
+            '{FirstName}', '{FullName}', '{HAF}', '{QA}',
+            '{MissingSummary}', '{SessionsOnlySummary}', '{WebinarsOnlySummary}', '{ActionItemsOnlySummary}',
+            '{MissingSessions_Current}', '{MissingSessions_Past}',
+            '{MissingWebinars_Current}', '{MissingWebinars_Past}',
+            '{MissingFafsa}', '{MissingCss}', '{MissingCollegeApp}'
+        ];
 
-            const msg = getReplacedMessage(af);
+        // Dynamically add supported granular specific tags
+        allMonths.forEach(m => allSupportedTokens.push(`{Missing_${m}}`));
+        uniqueWebinars.forEach(w => allSupportedTokens.push(`{Missing_${w.replace(/\s+/g, '')}}`));
+        uniqueAFMs.forEach(a => allSupportedTokens.push(`{Missing_${a.replace(/\s+/g, '')}}`));
+
+        filteredData.forEach(af => {
+            const msg = getReplacedMessage(af, false); // loose check to see if obligations exist at all
+            const strictMsg = getReplacedMessage(af, true); // strict check for the actual text
             const reasons = [];
 
-            if (msg.includes('[No Missing') || msg.includes('[NO MISSING') || msg.includes('[Not Missing')) {
+            // Check if they even have missing obligations matching current filters
+            if (msg.includes('[NO MISSING OBLIGATIONS MATCHING FILTERS]')) {
+                results.skipped++;
+                return;
+            }
+
+            if (strictMsg.includes('[No Missing') || strictMsg.includes('[NO MISSING') || strictMsg.includes('[Not Missing')) {
                 reasons.push('Contains placeholder for missing obligation');
             }
-            if (msg.includes('[USE {MissingSummary} INSTEAD]')) {
-                reasons.push('Contains an invalid or legacy token');
+            if (strictMsg.includes('[USE {MissingSummary} INSTEAD]')) {
+                reasons.push('Contains an invalid or legacy token. We recommend using the new {MissingSummary} presets.');
             }
-            if (msg.match(/\{[^}]+\}/)) {
-                reasons.push('Contains unresolved token');
+
+            // Check for literally any typed token that wasn't replaced (meaning it's unsupported)
+            const remainingBraces = strictMsg.match(/\{[^}]+\}/g);
+            if (remainingBraces && remainingBraces.length > 0) {
+                const legacyDetected = remainingBraces.some(t => ['{MissingSessions_Current}', '{MissingWebinars_Current}', '{MissingPastWebinars}', '{MissingHsfs}', '{MissingSessions_Past}'].includes(t));
+                if (legacyDetected) {
+                    reasons.push(`Contains legacy or unresolved token: ${remainingBraces.join(', ')}. Please use {MissingSummary} or Presets instead.`);
+                } else {
+                    reasons.push(`Contains unresolved or unsupported token: ${remainingBraces.join(', ')}`);
+                }
             }
+
             if (msg.includes('[]')) {
                 reasons.push('Contains empty brackets []');
             }
@@ -100,7 +121,7 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
             }
         });
         return results;
-    }, [filteredData, message, reportingMonth]);
+    }, [filteredData, message, reportingMonth, filters]);
 
     const getBccList = () => {
         if (validationResults.failed > 0) {
@@ -108,78 +129,198 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
             return "";
         }
         return filteredData.filter(d => {
-            const hasAnyMissing = (d.action_flags || []).length > 0 || d.has_missing_fafsa || d.has_missing_css || d.has_missing_college_app;
+            const hasAnyMissing = !getReplacedMessage(d, false).includes('[NO MISSING OBLIGATIONS MATCHING FILTERS]');
             return hasAnyMissing;
         }).map(d => d.email).filter(Boolean).join(', ');
     };
 
-    function getReplacedMessage(af) {
+    function getYearForMonth(monthName) {
+        const y2025 = ['March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const y2026 = ['January', 'February'];
+        if (y2025.includes(monthName)) return 2025;
+        if (y2026.includes(monthName)) return 2026;
+        return new Date().getFullYear();
+    }
+
+    function sortMonths(a, b) {
+        const ya = getYearForMonth(a);
+        const yb = getYearForMonth(b);
+        if (ya !== yb) return ya - yb;
+        return monthOrder.indexOf(a) - monthOrder.indexOf(b);
+    }
+
+    function formatMonthList(months) {
+        if (months.length === 0) return '';
+        const uniqueYears = new Set(months.map(m => getYearForMonth(m)));
+        const sameYear = uniqueYears.size === 1;
+
+        let displayMonths = months.map(m => {
+            if (!sameYear) return `${m} ${getYearForMonth(m)}`;
+            return m;
+        });
+
+        if (displayMonths.length === 1) return displayMonths[0];
+        if (displayMonths.length === 2) return `${displayMonths[0]} and ${displayMonths[1]}`;
+        return displayMonths.slice(0, -1).join(', ') + ', and ' + displayMonths[displayMonths.length - 1];
+    }
+
+    function getReplacedMessage(af, strict = true) {
         let msg = message;
-        msg = msg.replace(/\{FirstName\}/g, af.preferredName || af.fullName.split(' ')[0] || '');
-        msg = msg.replace(/\{FullName\}/g, af.fullName || '');
-        msg = msg.replace(/\{HAF\}/g, af.assigned_haf || 'Unassigned');
 
-        if (msg.includes('{MissingSummary}')) {
-            const clauses = [];
-
-            // 1. Sessions
-            const missingSessions = (af.action_flags || []).filter(f => f.type === 'session').map(f => f.month).reduce((acc, current) => {
-                if (!acc.includes(current)) acc.push(current);
-                return acc;
-            }, []);
-
-            if (missingSessions.length > 0) {
-                // Sort chronologically
-                missingSessions.sort((a, b) => monthOrder.indexOf(a) - monthOrder.indexOf(b));
-                const formattedMonths = missingSessions.length > 1
-                    ? missingSessions.slice(0, -1).join(', ') + ' and ' + missingSessions[missingSessions.length - 1]
-                    : missingSessions[0];
-                clauses.push(`your session ${missingSessions.length > 1 ? 'summaries' : 'summary'} for ${formattedMonths}`);
-            }
-
-            // 2. Webinars
-            const missingWebinars = (af.action_flags || []).filter(f => f.type === 'webinar').map(f => f.target).reduce((acc, current) => {
-                if (!acc.includes(current)) acc.push(current);
-                return acc;
-            }, []);
-
-            if (missingWebinars.length > 0) {
-                const uniqueWebs = missingWebinars.map(w => w.replace(' Webinar', ''));
-                const formattedWebs = uniqueWebs.length > 1
-                    ? uniqueWebs.slice(0, -1).join(', ') + ' and ' + uniqueWebs[uniqueWebs.length - 1]
-                    : uniqueWebs[0];
-                clauses.push(`the ${formattedWebs} ${missingWebinars.length > 1 ? 'webinars' : 'webinar'}`);
-            }
-
-            // 3. Action Items (AFM / Milestones)
-            if (af.has_missing_fafsa) clauses.push('your FAFSA');
-            if (af.has_missing_css) clauses.push('your CSS Profile');
-            if (af.has_missing_college_app) clauses.push('your College Application');
-
-            const missingAFMs = (af.action_flags || []).filter(f => f.type === 'afm').map(f => f.target).reduce((acc, current) => {
-                if (!acc.includes(current)) acc.push(current);
-                return acc;
-            }, []);
-
-            if (missingAFMs.length > 0) {
-                clauses.push(...missingAFMs);
-            }
-
-            let joinedSummary = '';
-            if (clauses.length === 0) {
-                joinedSummary = '[NO MISSING OBLIGATIONS]';
-            } else if (clauses.length === 1) {
-                joinedSummary = clauses[0];
-            } else if (clauses.length === 2) {
-                joinedSummary = clauses.join(' and ');
-            } else {
-                joinedSummary = clauses.slice(0, -1).join(', ') + ', and ' + clauses[clauses.length - 1];
-            }
-
-            msg = msg.replace(/\{MissingSummary\}/g, joinedSummary);
+        // Expose a base validation check
+        if (!strict) {
+            msg = '{MissingSummary}';
         }
 
-        // Granular Session Tokens
+        msg = msg.replace(/\{FirstName\}/g, af.preferredName || (af.fullName || '').split(' ')[0] || '');
+        msg = msg.replace(/\{FullName\}/g, af.fullName || '');
+        msg = msg.replace(/\{HAF\}/g, af.assigned_haf || 'Unassigned');
+        msg = msg.replace(/\{QA\}/g, af.qa_status || 'Unknown');
+
+        // Identify intersection with Dashboard filters
+        const activeFlags = filters.flags || [];
+        const isAll = activeFlags.length === 0;
+
+        const buildSummary = (includeSessions, includeWebinars, includeActionItems) => {
+            // --- 1. SESSIONS ---
+            let sessionMonths = [];
+            if (includeSessions) {
+                (af.action_flags || []).filter(f => f.type === 'session').forEach(f => {
+                    let include = isAll;
+                    if (!include) {
+                        if (activeFlags.includes('missing_session') && f.month === reportingMonth) include = true;
+                        if (activeFlags.includes('missing_past_sessions') && f.month !== reportingMonth) include = true;
+                        if (activeFlags.includes(`session_${f.month}`)) include = true;
+                    }
+                    if (include && !sessionMonths.includes(f.month)) sessionMonths.push(f.month);
+                });
+                sessionMonths.sort(sortMonths);
+            }
+
+            // --- 2. WEBINARS ---
+            let webinarNames = [];
+            if (includeWebinars) {
+                (af.action_flags || []).filter(f => f.type === 'webinar').forEach(f => {
+                    let include = isAll;
+                    if (!include) {
+                        if (activeFlags.includes('missing_webinar') && String(f.target).toLowerCase().includes(reportingMonth.toLowerCase())) include = true;
+                        if (activeFlags.includes('missing_past_webinars') && !String(f.target).toLowerCase().includes(reportingMonth.toLowerCase())) include = true;
+                        if (activeFlags.includes(`webinar_${f.target}`)) include = true;
+                    }
+                    if (include && !webinarNames.includes(f.target)) webinarNames.push(f.target);
+                });
+            }
+
+            let friendlyWebinars = [];
+            let rawWebinars = [];
+            webinarNames.forEach(w => {
+                const wLower = String(w).toLowerCase();
+                let matchedMonth = null;
+                monthOrder.forEach(m => {
+                    if (wLower.includes(m.toLowerCase()) && !wLower.includes('cfu')) matchedMonth = m;
+                });
+                if (matchedMonth && friendlyWebinars.indexOf(matchedMonth) === -1) friendlyWebinars.push(matchedMonth);
+                else rawWebinars.push(w);
+            });
+
+            let webinarClauses = [];
+            if (friendlyWebinars.length > 0) {
+                friendlyWebinars.sort(sortMonths);
+                webinarClauses.push(`the ${formatMonthList(friendlyWebinars)} ${friendlyWebinars.length > 1 ? 'webinars' : 'webinar'}`);
+            }
+            rawWebinars.forEach(w => webinarClauses.push(`the ${w} webinar`));
+
+            let webinarJoined = '';
+            if (webinarClauses.length === 1) webinarJoined = webinarClauses[0];
+            else if (webinarClauses.length === 2) webinarJoined = webinarClauses.join(' and ');
+            else if (webinarClauses.length > 2) webinarJoined = webinarClauses.slice(0, -1).join(', ') + ', and ' + webinarClauses[webinarClauses.length - 1];
+
+            // --- 3. ACTION ITEMS ---
+            let hsfMap = {};
+            if (includeActionItems) {
+                (af.action_flags || []).filter(f => f.type === 'milestone').forEach(f => {
+                    let include = isAll;
+                    if (!include) {
+                        if (f.target === 'FAFSA' && activeFlags.includes('missing_fafsa')) include = true;
+                        if (f.target === 'CSS Profile' && activeFlags.includes('missing_css')) include = true;
+                        if (f.target === 'College Application' && activeFlags.includes('missing_college_app')) include = true;
+                    }
+                    if (include) {
+                        const names = [...(f.hsfNames || [])].sort().join(', ');
+                        if (!hsfMap[names]) hsfMap[names] = [];
+                        if (!hsfMap[names].includes(f.target)) hsfMap[names].push(f.target);
+                    }
+                });
+            }
+
+            let actionClauses = [];
+            Object.keys(hsfMap).forEach(hsfNamesStr => {
+                const items = hsfMap[hsfNamesStr];
+                const itemStr = items.length === 1 ? items[0] : (items.length === 2 ? items.join(' and ') : items.slice(0, -1).join(', ') + ' and ' + items[items.length - 1]);
+                const hsfs = hsfNamesStr ? hsfNamesStr.split(', ') : [];
+                let hsfStr = '';
+                if (hsfs.length === 1) hsfStr = ` for ${hsfs[0]}`;
+                else if (hsfs.length === 2) hsfStr = ` for ${hsfs[0]} and ${hsfs[1]}`;
+                else if (hsfs.length >= 3) hsfStr = ` for ${hsfs.length} students`;
+                actionClauses.push(`your ${itemStr}${hsfStr}`);
+            });
+
+            // --- 4. AFM ---
+            let afmItems = [];
+            if (includeActionItems) {
+                (af.action_flags || []).filter(f => f.type === 'afm').forEach(f => {
+                    let include = isAll;
+                    if (!include) {
+                        if (activeFlags.includes(`afm_${f.target}`)) include = true;
+                    }
+                    if (include && !afmItems.includes(f.target)) afmItems.push(f.target);
+                });
+            }
+
+            // --- SUMMARY ASSEMBLY ---
+            let finalSummary = '';
+            let baseClauses = [];
+
+            if (sessionMonths.length === 1 && friendlyWebinars.length === 1 && rawWebinars.length === 0 && sessionMonths[0] === friendlyWebinars[0] && actionClauses.length === 0) {
+                // Same-month Optimization
+                const m = sessionMonths[0];
+                const yearStr = ` ${getYearForMonth(m)}`;
+                baseClauses.push(`your ${m}${yearStr} session summary and webinar`);
+            } else {
+                if (sessionMonths.length > 0) baseClauses.push(`your ${formatMonthList(sessionMonths)} session ${sessionMonths.length > 1 ? 'summaries' : 'summary'}`);
+                if (webinarJoined) baseClauses.push(webinarJoined);
+                actionClauses.forEach(ac => baseClauses.push(ac));
+            }
+
+            if (baseClauses.length === 0 && afmItems.length === 0) {
+                finalSummary = '[NO MISSING OBLIGATIONS MATCHING FILTERS]';
+            } else {
+                if (baseClauses.length === 1) finalSummary = baseClauses[0];
+                else if (baseClauses.length === 2) finalSummary = baseClauses.join(' and ');
+                else if (baseClauses.length > 2) finalSummary = baseClauses.slice(0, -1).join(', ') + ', and ' + baseClauses[baseClauses.length - 1];
+
+                if (afmItems.length > 0) {
+                    let afmTrimmed = afmItems;
+                    let extraStr = '';
+                    if (afmItems.length > 2) {
+                        afmTrimmed = afmItems.slice(0, 2);
+                        extraStr = ` and ${afmItems.length - 2} more AFM/other items`;
+                    }
+                    let afmStr = afmTrimmed.length === 1 ? afmTrimmed[0] : (afmTrimmed.length === 2 ? afmTrimmed.join(' and ') : afmTrimmed.slice(0, -1).join(', ') + ', and ' + afmTrimmed[afmTrimmed.length - 1]);
+
+                    if (finalSummary) finalSummary += `, and the following AFM/other items: ${afmStr}${extraStr}`;
+                    else finalSummary = `the following AFM/other items: ${afmStr}${extraStr}`;
+                }
+            }
+            return finalSummary;
+        };
+
+        if (msg.includes('{MissingSummary}')) msg = msg.replace(/\{MissingSummary\}/g, buildSummary(true, true, true));
+        if (msg.includes('{SessionsOnlySummary}')) msg = msg.replace(/\{SessionsOnlySummary\}/g, buildSummary(true, false, false));
+        if (msg.includes('{WebinarsOnlySummary}')) msg = msg.replace(/\{WebinarsOnlySummary\}/g, buildSummary(false, true, false));
+        if (msg.includes('{ActionItemsOnlySummary}')) msg = msg.replace(/\{ActionItemsOnlySummary\}/g, buildSummary(false, false, true));
+
+        // --- GRANULAR FALLBACKS ---
         if (msg.includes('{MissingSessions_Current}')) {
             const missing = (af.action_flags || []).filter(f => f.type === 'session' && f.month === reportingMonth).map(f => f.month);
             msg = msg.replace(/\{MissingSessions_Current\}/g, missing.length > 0 ? `missing session for ${missing[0]}` : `[No Missing Session for ${reportingMonth}]`);
@@ -187,7 +328,7 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
         if (msg.includes('{MissingSessions_Past}')) {
             const missing = (af.action_flags || []).filter(f => f.type === 'session' && f.month !== reportingMonth).map(f => f.month);
             if (missing.length > 0) {
-                missing.sort((a, b) => monthOrder.indexOf(a) - monthOrder.indexOf(b));
+                missing.sort(sortMonths);
                 const formatted = missing.length > 1 ? missing.slice(0, -1).join(', ') + ' and ' + missing[missing.length - 1] : missing[0];
                 msg = msg.replace(/\{MissingSessions_Past\}/g, `missing session ${missing.length > 1 ? 'summaries' : 'summary'} for ${formatted}`);
             } else {
@@ -195,18 +336,14 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
             }
         }
 
-        // Granular Specific Sessions (Jan 2026, etc)
-        // Supported fallback for specific months
-        const allPossibleMonths = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-        allPossibleMonths.forEach(month => {
+        allMonths.forEach(month => {
             const tag = `{Missing_${month}}`;
             if (msg.includes(tag)) {
                 const isMissing = (af.action_flags || []).some(f => f.type === 'session' && f.month === month);
-                msg = msg.replace(new RegExp(tag, 'g'), isMissing ? `session for ${month}` : `[No Missing ${month} Session]`);
+                msg = msg.replaceAll(tag, isMissing ? `session for ${month}` : `[No Missing ${month} Session]`);
             }
         });
 
-        // Granular Webinar Tokens
         if (msg.includes('{MissingWebinars_Current}')) {
             const missing = (af.action_flags || []).filter(f => f.type === 'webinar' && String(f.target).toLowerCase().includes(reportingMonth.toLowerCase())).map(f => f.target);
             msg = msg.replace(/\{MissingWebinars_Current\}/g, missing.length > 0 ? `missing ${missing.join(', ')}` : `[No Missing Webinars for ${reportingMonth}]`);
@@ -216,39 +353,30 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
             msg = msg.replace(/\{MissingWebinars_Past\}/g, missing.length > 0 ? `missing ${missing.join(', ')}` : '[No Missing Past Webinars]');
         }
 
-        // Granular Specific Webinar tags
         uniqueWebinars.forEach(webinar => {
             const tag = `{Missing_${webinar.replace(/\s+/g, '')}}`;
             if (msg.includes(tag)) {
                 const isMissing = (af.action_flags || []).some(f => f.type === 'webinar' && f.target === webinar);
-                msg = msg.replace(new RegExp(tag, 'g'), isMissing ? webinar : `[No Missing ${webinar}]`);
+                msg = msg.replaceAll(tag, isMissing ? webinar : `[No Missing ${webinar}]`);
             }
         });
 
-        // Granular AFM tags
         uniqueAFMs.forEach(afm => {
             const tag = `{Missing_${afm.replace(/\s+/g, '')}}`;
             if (msg.includes(tag)) {
                 const isMissing = (af.action_flags || []).some(f => f.type === 'afm' && f.target === afm);
-                msg = msg.replace(new RegExp(tag, 'g'), isMissing ? afm : `[No Missing ${afm}]`);
+                msg = msg.replaceAll(tag, isMissing ? afm : `[No Missing ${afm}]`);
             }
         });
 
-        if (msg.includes('{MissingCss}')) {
-            msg = msg.replace(/\{MissingCss\}/g, af.has_missing_css ? 'CSS Profile' : '[Not Missing CSS Profile]');
-        }
-        if (msg.includes('{MissingFafsa}')) {
-            msg = msg.replace(/\{MissingFafsa\}/g, af.has_missing_fafsa ? 'FAFSA' : '[Not Missing FAFSA]');
-        }
-        if (msg.includes('{MissingCollegeApp}')) {
-            msg = msg.replace(/\{MissingCollegeApp\}/g, af.has_missing_college_app ? 'College Application' : '[Not Missing College App]');
-        }
+        if (msg.includes('{MissingCss}')) msg = msg.replace(/\{MissingCss\}/g, af.has_missing_css ? 'CSS Profile' : '[Not Missing CSS Profile]');
+        if (msg.includes('{MissingFafsa}')) msg = msg.replace(/\{MissingFafsa\}/g, af.has_missing_fafsa ? 'FAFSA' : '[Not Missing FAFSA]');
+        if (msg.includes('{MissingCollegeApp}')) msg = msg.replace(/\{MissingCollegeApp\}/g, af.has_missing_college_app ? 'College Application' : '[Not Missing College App]');
 
-        // Final cleanup of legacy tags if somehow used
         msg = msg.replace(/\{MissingHsfs\}|\{MissingWebinars\}|\{MissingPastWebinars\}/g, '[USE {MissingSummary} INSTEAD]');
 
         return msg;
-    };
+    }
 
     const getRecommendedAction = (af) => {
         if (af.missing_sessions_count > 0) return `Text reminder for missing session [${reportingMonth}]`;
@@ -391,53 +519,58 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                         <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '8px', display: 'block' }}>Personalized Message Fields (auto-fills each AF’s missing items)</span>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
-                                <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--accent-gold)', width: '90px' }}>Smart Default:</span>
-                                <VariableBtn tag="{MissingSummary}" label="All Missing Obligations Summary" />
-                            </div>
-
-                            <div style={{ height: '1px', background: 'var(--border-color)', opacity: 0.5, margin: '2px 0' }}></div>
-
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
-                                <span style={{ fontSize: '11px', color: 'var(--text-muted)', width: '90px' }}>Identity:</span>
+                                <span style={{ fontSize: '11px', color: 'var(--text-muted)', width: '90px', fontWeight: 'bold' }}>Identity:</span>
                                 <VariableBtn tag="{FirstName}" label="First Name" />
                                 <VariableBtn tag="{FullName}" label="Full Name" />
                                 <VariableBtn tag="{HAF}" label="Assigned HAF" />
                                 <VariableBtn tag="{QA}" label="QA Status" />
                             </div>
 
-                            <div style={{ height: '1px', background: 'var(--border-color)', opacity: 0.2, margin: '2px 0' }}></div>
+                            <div style={{ height: '1px', background: 'var(--border-color)', opacity: 0.5, margin: '2px 0' }}></div>
 
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
-                                <span style={{ fontSize: '11px', color: 'var(--text-muted)', width: '90px' }}>Sessions:</span>
-                                <VariableBtn tag="{MissingSessions_Current}" label={`Missing Sessions [${reportingMonth}]`} />
-                                <VariableBtn tag="{MissingSessions_Past}" label="Missing Past Sessions" />
-                                {Array.from(new Set(data.flatMap(d => (d.action_flags || []).filter(f => f.type === 'session').map(f => f.month)))).sort((a, b) => monthOrder.indexOf(a) - monthOrder.indexOf(b)).map(month => (
-                                    <VariableBtn key={month} tag={`{Missing_${month}}`} label={month} />
-                                ))}
+                                <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--accent-gold)', width: '90px' }}>Presets:</span>
+                                <VariableBtn tag="{MissingSummary}" label="All Missing Obligations Summary" />
+                                <VariableBtn tag="{SessionsOnlySummary}" label="Sessions Only Summary" />
+                                <VariableBtn tag="{WebinarsOnlySummary}" label="Webinars Only Summary" />
+                                <VariableBtn tag="{ActionItemsOnlySummary}" label="Action Items Only Summary" />
                             </div>
 
                             <div style={{ height: '1px', background: 'var(--border-color)', opacity: 0.2, margin: '2px 0' }}></div>
 
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
-                                <span style={{ fontSize: '11px', color: 'var(--text-muted)', width: '90px' }}>Webinars:</span>
-                                <VariableBtn tag="{MissingWebinars_Current}" label={`Missing Webinars [${reportingMonth}]`} />
-                                <VariableBtn tag="{MissingWebinars_Past}" label="Missing Past Webinars" />
-                                {uniqueWebinars.map(webinar => (
-                                    <VariableBtn key={webinar} tag={`{Missing_${webinar.replace(/\s+/g, '')}}`} label={webinar} />
-                                ))}
-                            </div>
+                            <details style={{ cursor: 'pointer', outline: 'none' }}>
+                                <summary style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-muted)', marginBottom: '8px', opacity: 0.8 }}>▶ Sessions (Granular Overrides)</summary>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', paddingLeft: '16px', background: 'rgba(0,0,0,0.1)', padding: '12px', borderRadius: '4px', paddingTop: '8px', paddingBottom: '8px' }}>
+                                    <VariableBtn tag="{MissingSessions_Current}" label={`Missing Sessions [${reportingMonth}]`} />
+                                    <VariableBtn tag="{MissingSessions_Past}" label="Missing Past Sessions" />
+                                    {allMonths.map(month => (
+                                        <VariableBtn key={month} tag={`{Missing_${month}}`} label={month} />
+                                    ))}
+                                </div>
+                            </details>
 
-                            <div style={{ height: '1px', background: 'var(--border-color)', opacity: 0.2, margin: '2px 0' }}></div>
+                            <details style={{ cursor: 'pointer', outline: 'none' }}>
+                                <summary style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-muted)', marginBottom: '8px', opacity: 0.8 }}>▶ Webinars (Granular Overrides)</summary>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', paddingLeft: '16px', background: 'rgba(0,0,0,0.1)', padding: '12px', borderRadius: '4px', paddingTop: '8px', paddingBottom: '8px' }}>
+                                    <VariableBtn tag="{MissingWebinars_Current}" label={`Missing Webinars [${reportingMonth}]`} />
+                                    <VariableBtn tag="{MissingWebinars_Past}" label="Missing Past Webinars" />
+                                    {uniqueWebinars.map(webinar => (
+                                        <VariableBtn key={webinar} tag={`{Missing_${webinar.replace(/\s+/g, '')}}`} label={webinar} />
+                                    ))}
+                                </div>
+                            </details>
 
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
-                                <span style={{ fontSize: '11px', color: 'var(--text-muted)', width: '90px' }}>Action Items:</span>
-                                <VariableBtn tag="{MissingFafsa}" label="Missing FAFSA" />
-                                <VariableBtn tag="{MissingCss}" label="Missing CSS Profile" />
-                                <VariableBtn tag="{MissingCollegeApp}" label="Missing College App" />
-                                {uniqueAFMs.map(afm => (
-                                    <VariableBtn key={afm} tag={`{Missing_${afm.replace(/\s+/g, '')}}`} label={afm} />
-                                ))}
-                            </div>
+                            <details style={{ cursor: 'pointer', outline: 'none' }}>
+                                <summary style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-muted)', marginBottom: '8px', opacity: 0.8 }}>▶ Action Items (Granular Overrides)</summary>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', paddingLeft: '16px', background: 'rgba(0,0,0,0.1)', padding: '12px', borderRadius: '4px', paddingTop: '8px', paddingBottom: '8px' }}>
+                                    <VariableBtn tag="{MissingFafsa}" label="Missing FAFSA" />
+                                    <VariableBtn tag="{MissingCss}" label="Missing CSS Profile" />
+                                    <VariableBtn tag="{MissingCollegeApp}" label="Missing College App" />
+                                    {uniqueAFMs.map(afm => (
+                                        <VariableBtn key={afm} tag={`{Missing_${afm.replace(/\s+/g, '')}}`} label={afm} />
+                                    ))}
+                                </div>
+                            </details>
                         </div>
                     </div>
 
@@ -491,8 +624,16 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                         {filteredData.slice(0, 50).map(af => {
                             const isSuccess = recentlyCopied.has(af.email);
                             const hasPhone = !!af.mobile;
-                            const msgValidation = validationResults.failures.find(f => f.email === af.email);
-                            const hasAnyMissing = (af.action_flags || []).length > 0 || af.has_missing_fafsa || af.has_missing_css || af.has_missing_college_app;
+                            const msg = getReplacedMessage(af, false); // loose check
+                            const strictMsg = getReplacedMessage(af, true); // actual message
+                            const hasAnyMissing = !msg.includes('[NO MISSING OBLIGATIONS MATCHING FILTERS]');
+                            const msgValidation = validationResults.failures.find(f => f.email === af.email) || null;
+
+                            const failureReasonsText = msgValidation?.reasons?.join('') || '';
+                            const unresolvedTemplateTokens = message.match(/\{[^}]+\}/g) || [];
+                            const hasUnresolvedTokenNotice =
+                                unresolvedTemplateTokens.length > 0 &&
+                                unresolvedTemplateTokens.some(token => !failureReasonsText.includes(token) && strictMsg.includes(token));
 
                             let borderColor = 'var(--border-color)';
                             if (!hasAnyMissing) borderColor = 'var(--success)';
@@ -583,7 +724,7 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                                             </div>
 
                                             <div style={{ fontSize: '12px', color: 'var(--text-primary)', background: 'rgba(0,0,0,0.1)', padding: '12px', borderRadius: '4px', whiteSpace: 'pre-wrap' }}>
-                                                {getReplacedMessage(af)}
+                                                {hasAnyMissing ? strictMsg : <span style={{ color: 'var(--text-muted)' }}>[NO MISSING OBLIGATIONS MATCHING FILTERS]</span>}
                                             </div>
 
                                             {msgValidation && (
@@ -596,6 +737,16 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                                                 </div>
                                             )}
 
+                                            {hasUnresolvedTokenNotice && (
+                                                <div style={{ background: 'rgba(245, 158, 11, 0.1)', color: 'var(--warning)', borderLeft: '2px solid var(--warning)', padding: '8px 12px', fontSize: '11px', display: 'flex', alignItems: 'flex-start', gap: '8px', marginTop: '4px' }}>
+                                                    <AlertCircle size={14} style={{ marginTop: '2px' }} />
+                                                    <div>
+                                                        <strong>Notice:</strong><br />
+                                                        Unresolved token detected. Ensure you are using supported placeholders like {'{MissingSummary}'}.
+                                                    </div>
+                                                </div>
+                                            )}
+
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                                                     <strong>Recommended Action:</strong> {getRecommendedAction(af)}
@@ -603,13 +754,13 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                                                 </div>
 
                                                 <div style={{ display: 'flex', gap: '8px' }}>
-                                                    <button className="btn" onClick={() => copyToClipboardAndMarkContacted(getReplacedMessage(af), af.email)} style={{ fontSize: '11px', padding: '6px 12px' }} disabled={!!msgValidation}>
+                                                    <button className="btn" onClick={() => copyToClipboardAndMarkContacted(strictMsg, af.email)} style={{ fontSize: '11px', padding: '6px 12px' }} disabled={!!msgValidation}>
                                                         <Copy size={12} /> Copy Message
                                                     </button>
                                                     <button
                                                         className={`btn ${isSuccess ? 'success' : 'btn-primary'}`}
                                                         style={{ fontSize: '11px', padding: '6px 12px' }}
-                                                        onClick={() => copyToClipboardAndMarkContacted(getReplacedMessage(af), af.email)}
+                                                        onClick={() => copyToClipboardAndMarkContacted(strictMsg, af.email)}
                                                         disabled={!!msgValidation}
                                                     >
                                                         {isSuccess ? <><CheckCircle size={12} /> Logged!</> : <>{hasPhone ? <Smartphone size={12} /> : <Mail size={12} />} {hasPhone ? 'Copy Text Message' : 'Copy Email Message'}</>}
