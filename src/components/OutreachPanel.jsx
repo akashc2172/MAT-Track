@@ -6,7 +6,7 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
     const [message, setMessage] = useState("Hi {FirstName},\n\nYou are currently missing {MissingSummary}.\n\nPlease submit this as soon as possible!");
     const [scheduledDate, setScheduledDate] = useState("");
     const [subject, setSubject] = useState("Missing Requirements Update");
-    const [ccs, setCcs] = useState([""]);
+    const [cc, setCc] = useState("");
     const [recentlyCopied, setRecentlyCopied] = useState(new Set());
     const [showExportModal, setShowExportModal] = useState(false);
     const textareaRef = useRef(null);
@@ -448,7 +448,7 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
             csvEscape(af.fullName),
             csvEscape(subject),
             csvEscape(getReplacedMessage(af, true)),
-            csvEscape(ccs.filter(c => c.trim() !== "").join(', ')),
+            csvEscape(cc),
             csvEscape(af.assigned_haf),
             csvEscape(af.qa_status)
         ]);
@@ -610,45 +610,21 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                                 <label style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-muted)', display: 'block', margin: 0 }}>CC Addresses (Optional)</label>
-                                <button
-                                    className="btn"
-                                    style={{ fontSize: '10px', padding: '2px 8px' }}
-                                    onClick={() => setCcs([...ccs, ""])}
-                                >
-                                    + Add CC
-                                </button>
                             </div>
-                            {ccs.map((ccVal, idx) => (
-                                <div key={idx} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                    <input
-                                        type="email"
-                                        style={{
-                                            flex: 1, padding: '8px 12px',
-                                            background: 'var(--bg-main)', color: 'var(--text-primary)',
-                                            border: '1px solid var(--border-color)', borderRadius: '6px',
-                                            fontFamily: 'inherit', fontSize: '13px'
-                                        }}
-                                        value={ccVal}
-                                        onChange={e => {
-                                            const newCcs = [...ccs];
-                                            newCcs[idx] = e.target.value;
-                                            setCcs(newCcs);
-                                        }}
-                                        placeholder={`e.g. manager${idx > 0 ? Object.is(idx, 1) ? '2' : Object.is(idx, 2) ? '3' : '' : ''}@example.com`}
-                                    />
-                                    {ccs.length > 1 && (
-                                        <button
-                                            onClick={() => setCcs(ccs.filter((_, i) => i !== idx))}
-                                            style={{ background: 'transparent', border: 'none', color: 'var(--danger)', cursor: 'pointer', padding: '4px' }}
-                                            title="Remove CC"
-                                        >
-                                            <X size={14} />
-                                        </button>
-                                    )}
-                                </div>
-                            ))}
-                            <div style={{ fontSize: '10px', color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
-                                <CheckCircle size={10} /> Active CCs will be automatically merged into the CSV export.
+                            <input
+                                type="text"
+                                style={{
+                                    width: '100%', padding: '8px 12px',
+                                    background: 'var(--bg-main)', color: 'var(--text-primary)',
+                                    border: '1px solid var(--border-color)', borderRadius: '6px',
+                                    fontFamily: 'inherit', fontSize: '13px'
+                                }}
+                                value={cc}
+                                onChange={e => setCc(e.target.value)}
+                                placeholder="e.g. manager1@gmail.com, manager2@gmail.com"
+                            />
+                            <div style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
+                                For multiple addresses, separate with commas.
                             </div>
                         </div>
                     </div>
@@ -900,10 +876,10 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                                 <div style={{ fontSize: '14px', color: 'var(--text-primary)', fontWeight: '500' }}>{subject}</div>
                             </div>
 
-                            {ccs.filter(c => c.trim() !== "").length > 0 && (
+                            {cc.trim() !== "" && (
                                 <div>
                                     <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>CC ADDRESSES</span>
-                                    <div style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{ccs.filter(c => c.trim() !== "").join(', ')}</div>
+                                    <div style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{cc}</div>
                                 </div>
                             )}
 
