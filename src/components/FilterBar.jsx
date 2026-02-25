@@ -86,6 +86,24 @@ export default function FilterBar({ data, filters, setFilters, reportingMonth })
 
                     <div style={{ height: '1px', background: 'var(--border-color)', opacity: 0.5 }}></div>
 
+                    {/* 1b. Not Live Sessions */}
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px' }}>
+                        <span style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--accent-gold)', fontWeight: '800', width: '120px' }}>Not Live Sessions</span>
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                            <Pill category="flags" value="not_live_session" label={`Not Live Session [${reportingMonth}]`} colorClass="var(--accent-gold)" />
+                            <Pill category="flags" value="not_live_past_sessions" label="Not Live Past Sessions" colorClass="var(--accent-gold)" />
+                            <div style={{ width: '1px', height: '16px', background: 'var(--border-color)', margin: '0 8px', opacity: 0.5 }}></div>
+                            {Array.from(new Set(data.flatMap(d => (d.action_flags || []).filter(f => f.type === 'session_not_live').map(f => f.month)))).sort((a, b) => {
+                                const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                                return months.indexOf(a) - months.indexOf(b);
+                            }).map(month => (
+                                <Pill key={`not_live_${month}`} category="flags" value={`not_live_${month}`} label={`Not Live [${month}]`} colorClass="var(--accent-gold)" />
+                            ))}
+                        </div>
+                    </div>
+
+                    <div style={{ height: '1px', background: 'var(--border-color)', opacity: 0.5 }}></div>
+
                     {/* 2. Webinars */}
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px' }}>
                         <span style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--warning)', fontWeight: '800', width: '120px' }}>Webinars</span>
@@ -144,6 +162,9 @@ export default function FilterBar({ data, filters, setFilters, reportingMonth })
                     {filters.flags?.length > 0 && <span>Attention: {filters.flags.map(f => {
                         if (f.startsWith('webinar_')) return `Missing ${f.replace('webinar_', '')}`;
                         if (f.startsWith('afm_')) return `Missing ${f.replace('afm_', '')}`;
+                        if (f === 'not_live_session') return 'Not Live Session';
+                        if (f === 'not_live_past_sessions') return 'Not Live Past Sessions';
+                        if (f.startsWith('not_live_')) return `Not Live [${f.replace('not_live_', '')}]`;
                         if (f.startsWith('session_')) return `Missing ${f.replace('session_', '')} Session`;
                         if (f === 'missing_college_app') return 'Missing College App';
                         return f.replace(/_/g, ' ');

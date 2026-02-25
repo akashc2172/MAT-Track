@@ -75,6 +75,8 @@ export default function MasterTable({ data, filters, reportingMonth }) {
 
                     if (flag === 'missing_session' && row.missing_sessions_count > 0) return true;
                     if (flag === 'missing_past_sessions' && row.missing_past_sessions_count > 0) return true;
+                    if (flag === 'not_live_session' && row.not_live_sessions_count > 0) return true;
+                    if (flag === 'not_live_past_sessions' && row.not_live_past_sessions_count > 0) return true;
                     if (flag === 'missing_webinar' && row.missing_webinars_count > 0) return true;
                     if (flag === 'missing_past_webinars' && row.missing_past_webinars_count > 0) return true;
                     if (flag === 'missing_fafsa' && row.has_missing_fafsa) return true;
@@ -83,6 +85,10 @@ export default function MasterTable({ data, filters, reportingMonth }) {
                     if (flag.startsWith('session_')) {
                         const search = flag.replace('session_', '');
                         if (flags.some(f => f.type === 'session' && f.month === search)) return true;
+                    }
+                    if (flag.startsWith('not_live_') && flag !== 'not_live_session' && flag !== 'not_live_past_sessions') {
+                        const search = flag.replace('not_live_', '');
+                        if (flags.some(f => f.type === 'session_not_live' && f.month === search)) return true;
                     }
                     if (flag.startsWith('webinar_')) {
                         const search = flag.replace('webinar_', '');
@@ -324,6 +330,9 @@ export default function MasterTable({ data, filters, reportingMonth }) {
                                                                 if (flagObj.type === 'session') {
                                                                     displayFlag = `Missing Session: ${flagObj.month} (${flagObj.target})`;
                                                                     isDanger = flagObj.month !== reportingMonth;
+                                                                } else if (flagObj.type === 'session_not_live') {
+                                                                    displayFlag = `Not Live: ${flagObj.month} (${flagObj.target})`;
+                                                                    isDanger = false;
                                                                 } else if (flagObj.type === 'webinar') {
                                                                     displayFlag = `Missing Webinar: ${flagObj.target}`;
                                                                     isDanger = !flagObj.target.toLowerCase().includes(reportingMonth.toLowerCase());

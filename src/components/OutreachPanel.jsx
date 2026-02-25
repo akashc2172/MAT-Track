@@ -29,12 +29,17 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                     if (flagStr === 'missing_session') return (row.action_flags || []).some(f => f.type === 'session' && f.month === reportingMonth);
                     if (flagStr === 'missing_webinar') return (row.action_flags || []).some(f => f.type === 'webinar' && String(f.target).includes(reportingMonth));
                     if (flagStr === 'missing_past_sessions') return row.missing_past_sessions_count > 0;
+                    if (flagStr === 'not_live_session') return row.not_live_sessions_count > 0;
+                    if (flagStr === 'not_live_past_sessions') return row.not_live_past_sessions_count > 0;
                     if (flagStr === 'missing_past_webinars') return row.missing_past_webinars_count > 0;
                     if (flagStr === 'missing_fafsa') return row.has_missing_fafsa;
                     if (flagStr === 'missing_css') return row.has_missing_css;
                     if (flagStr === 'missing_college_app') return row.has_missing_college_app;
 
                     if (flagStr.startsWith('session_')) return (row.action_flags || []).some(f => f.type === 'session' && flagStr === `session_${f.month}`);
+                    if (flagStr.startsWith('not_live_') && flagStr !== 'not_live_session' && flagStr !== 'not_live_past_sessions') {
+                        return (row.action_flags || []).some(f => f.type === 'session_not_live' && flagStr === `not_live_${f.month}`);
+                    }
                     if (flagStr.startsWith('webinar_')) return (row.action_flags || []).some(f => f.type === 'webinar' && flagStr === `webinar_${f.target}`);
                     if (flagStr.startsWith('afm_')) return (row.action_flags || []).some(f => f.type === 'afm' && flagStr === `afm_${f.target}`);
 
@@ -71,13 +76,16 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
         const allSupportedTokens = [
             '{FirstName}', '{FullName}', '{HAF}', '{QA}',
             '{MissingSummary}', '{SessionsOnlySummary}', '{WebinarsOnlySummary}', '{ActionItemsOnlySummary}',
+            '{NotLiveSessionsOnlySummary}',
             '{MissingSessions_Current}', '{MissingSessions_Past}',
+            '{NotLiveSessions_Current}', '{NotLiveSessions_Past}',
             '{MissingWebinars_Current}', '{MissingWebinars_Past}',
             '{MissingFafsa}', '{MissingCss}', '{MissingCollegeApp}'
         ];
 
         // Dynamically add supported granular specific tags
         allMonths.forEach(m => allSupportedTokens.push(`{Missing_${m}}`));
+        allMonths.forEach(m => allSupportedTokens.push(`{NotLive_${m}}`));
         uniqueWebinars.forEach(w => allSupportedTokens.push(`{Missing_${w.replace(/\s+/g, '')}}`));
         uniqueAFMs.forEach(a => allSupportedTokens.push(`{Missing_${a.replace(/\s+/g, '')}}`));
 
@@ -323,11 +331,32 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
         if (msg.includes('{WebinarsOnlySummary}')) msg = msg.replace(/\{WebinarsOnlySummary\}/g, buildSummary(false, true, false));
         if (msg.includes('{ActionItemsOnlySummary}')) msg = msg.replace(/\{ActionItemsOnlySummary\}/g, buildSummary(false, false, true));
 
+        // --- NOT LIVE SUMMARY AGGREGATION ---
+        if (msg.includes('{NotLiveSessionsOnlySummary}')) {
+            const notLiveMonths = [];
+            (af.action_flags || []).filter(f => f.type === 'session_not_live').forEach(f => {
+                if (!notLiveMonths.includes(f.month)) notLiveMonths.push(f.month);
+            });
+            notLiveMonths.sort(sortMonths);
+            if (notLiveMonths.length > 0) {
+                const monthStr = formatMonthList(notLiveMonths);
+                const suffix = notLiveMonths.length > 1 ? 'summaries marked Not Live' : 'summary marked Not Live';
+                msg = msg.replace(/\{NotLiveSessionsOnlySummary\}/g, `your ${monthStr} session ${suffix}`);
+            } else {
+                msg = msg.replace(/\{NotLiveSessionsOnlySummary\}/g, '[No Not Live Sessions]');
+            }
+        }
+
         // --- GRANULAR FALLBACKS ---
         if (msg.includes('{MissingSessions_Current}')) {
             const missing = (af.action_flags || []).filter(f => f.type === 'session' && f.month === reportingMonth).map(f => f.month);
             msg = msg.replace(/\{MissingSessions_Current\}/g, missing.length > 0 ? `missing session for ${missing[0]}` : `[No Missing Session for ${reportingMonth}]`);
         }
+        if (msg.includes('{NotLiveSessions_Current}')) {
+            const nl = (af.action_flags || []).filter(f => f.type === 'session_not_live' && f.month === reportingMonth).map(f => f.month);
+            msg = msg.replace(/\{NotLiveSessions_Current\}/g, nl.length > 0 ? `session summary for ${nl[0]} marked Completed - Not Live` : `[No Not Live Session for ${reportingMonth}]`);
+        }
+
         if (msg.includes('{MissingSessions_Past}')) {
             const missing = (af.action_flags || []).filter(f => f.type === 'session' && f.month !== reportingMonth).map(f => f.month);
             if (missing.length > 0) {
@@ -338,12 +367,28 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                 msg = msg.replace(/\{MissingSessions_Past\}/g, '[No Missing Past Sessions]');
             }
         }
+        if (msg.includes('{NotLiveSessions_Past}')) {
+            const nl = (af.action_flags || []).filter(f => f.type === 'session_not_live' && f.month !== reportingMonth).map(f => f.month);
+            if (nl.length > 0) {
+                nl.sort(sortMonths);
+                const formatted = nl.length > 1 ? nl.slice(0, -1).join(', ') + ' and ' + nl[nl.length - 1] : nl[0];
+                msg = msg.replace(/\{NotLiveSessions_Past\}/g, `session ${nl.length > 1 ? 'summaries' : 'summary'} for ${formatted} marked Completed - Not Live`);
+            } else {
+                msg = msg.replace(/\{NotLiveSessions_Past\}/g, '[No Not Live Past Sessions]');
+            }
+        }
 
         allMonths.forEach(month => {
             const tag = `{Missing_${month}}`;
             if (msg.includes(tag)) {
                 const isMissing = (af.action_flags || []).some(f => f.type === 'session' && f.month === month);
                 msg = msg.replaceAll(tag, isMissing ? `session for ${month}` : `[No Missing ${month} Session]`);
+            }
+
+            const nlTag = `{NotLive_${month}}`;
+            if (msg.includes(nlTag)) {
+                const isNL = (af.action_flags || []).some(f => f.type === 'session_not_live' && f.month === month);
+                msg = msg.replaceAll(nlTag, isNL ? `session for ${month} marked Completed - Not Live` : `[No Not Live ${month} Session]`);
             }
         });
 
@@ -686,7 +731,8 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                             const hasPhone = !!af.mobile;
                             const msg = getReplacedMessage(af, false); // loose check
                             const strictMsg = getReplacedMessage(af, true); // actual message
-                            const hasAnyMissing = !msg.includes('[NO MISSING OBLIGATIONS MATCHING FILTERS]');
+                            const isMissingStandard = !msg.includes('[NO MISSING OBLIGATIONS MATCHING FILTERS]');
+                            const hasNeedsAttention = isMissingStandard || (af.action_flags || []).some(f => f.type === 'session_not_live');
                             const msgValidation = validationResults.failures.find(f => f.email === af.email) || null;
 
                             const failureReasonsText = msgValidation?.reasons?.join('') || '';
@@ -696,14 +742,14 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                                 unresolvedTemplateTokens.some(token => !failureReasonsText.includes(token) && strictMsg.includes(token));
 
                             let borderColor = 'var(--border-color)';
-                            if (!hasAnyMissing) borderColor = 'var(--success)';
+                            if (!hasNeedsAttention) borderColor = 'var(--success)';
                             else if (msgValidation) borderColor = 'var(--danger)';
                             else if (isSuccess) borderColor = 'var(--success)';
 
                             return (
                                 <div key={af.email} className="card" style={{
                                     padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px',
-                                    opacity: af.last_contact_date && hasAnyMissing ? 0.6 : 1, transition: 'all 0.3s ease',
+                                    opacity: af.last_contact_date && hasNeedsAttention ? 0.6 : 1, transition: 'all 0.3s ease',
                                     borderLeft: `4px solid ${borderColor}`
                                 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -720,7 +766,7 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                                         </div>
                                     </div>
 
-                                    {hasAnyMissing ? (
+                                    {hasNeedsAttention ? (
                                         <>
                                             {/* Grouped Needs Attention Section */}
                                             <div style={{ background: 'var(--bg-card)', borderRadius: '6px', padding: '12px', border: '1px dashed var(--border-color)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -741,6 +787,28 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                                                                 return m.indexOf(a) - m.indexOf(b);
                                                             }).map(month => (
                                                                 <span key={`af_sess_${month}`} style={{ background: 'rgba(245, 158, 11, 0.1)', color: 'var(--warning)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Missing {month}</span>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Not Live Sessions */}
+                                                {(af.not_live_sessions_count > 0 || af.not_live_past_sessions_count > 0 || (af.action_flags || []).some(f => f.type === 'session_not_live')) && (
+                                                    <div style={{ display: 'flex', gap: '16px', alignItems: 'baseline' }}>
+                                                        <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--accent-gold)', width: '120px' }}>Not Live Sessions:</span>
+                                                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                                            {af.not_live_sessions_count > 0 && <span style={{ background: 'transparent', border: '1px solid var(--accent-gold)', color: 'var(--accent-gold)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Not Live Session [{reportingMonth}]</span>}
+                                                            {af.not_live_past_sessions_count > 0 && <span style={{ background: 'transparent', border: '1px solid var(--accent-gold)', color: 'var(--accent-gold)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Not Live Past Sessions</span>}
+
+                                                            {(af.not_live_sessions_count > 0 || af.not_live_past_sessions_count > 0) && (af.action_flags || []).some(f => f.type === 'session_not_live') && (
+                                                                <div style={{ width: '1px', height: '12px', background: 'var(--border-color)', margin: '0 4px', opacity: 0.5 }}></div>
+                                                            )}
+
+                                                            {Array.from(new Set((af.action_flags || []).filter(f => f.type === 'session_not_live').map(f => f.month))).sort((a, b) => {
+                                                                const m = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                                                                return m.indexOf(a) - m.indexOf(b);
+                                                            }).map(month => (
+                                                                <span key={`af_sess_nl_${month}`} style={{ background: 'transparent', border: '1px solid var(--accent-gold)', color: 'var(--accent-gold)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Not Live {month}</span>
                                                             ))}
                                                         </div>
                                                     </div>

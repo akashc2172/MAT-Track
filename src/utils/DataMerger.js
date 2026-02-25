@@ -282,6 +282,7 @@ export function calculateDynamicMetrics(af, reportingMonth) {
     // Strict Metric Denominator Rules
     const excludedStatuses = ['n/a', 'not assigned', 'excused'];
     const isExcluded = (status) => excludedStatuses.includes(String(status).toLowerCase().trim());
+    const isNotLive = (status) => String(status).toLowerCase().includes('not live');
     const isCompleted = (status) => {
         const s = String(status).toLowerCase().trim();
         // Missing/unsubmitted DO count against denominators by returning false here (not completed)
@@ -298,7 +299,11 @@ export function calculateDynamicMetrics(af, reportingMonth) {
     let missingMonthWebinars = 0;
     let missingMonthSessions = 0;
 
+    let notLivePastSessionsCount = 0;
+    let notLiveMonthSessions = 0;
+
     const missingSessionMonths = [];
+    const notLiveSessionMonths = [];
     const missingWebinarNames = [];
     const missingAfmNames = [];
 
@@ -319,7 +324,17 @@ export function calculateDynamicMetrics(af, reportingMonth) {
 
             totalSessions += 1;
             const completed = isCompleted(status);
+            const notLive = isNotLive(status);
             const isReportingMonth = reportingMonth && month.toLowerCase().includes(reportingMonth.toLowerCase());
+
+            if (notLive) {
+                notLiveSessionMonths.push({ hsf: m.hsfName, month: month });
+                if (isReportingMonth) {
+                    notLiveMonthSessions += 1;
+                } else if (statusOrdinal > 0 && statusOrdinal < getStatusMonthOrdinal(reportingMonth)) {
+                    notLivePastSessionsCount += 1;
+                }
+            }
 
             if (completed) {
                 completedSessions += 1;
@@ -393,6 +408,9 @@ export function calculateDynamicMetrics(af, reportingMonth) {
     if (missingSessionMonths.length > 0) {
         missingSessionMonths.forEach(ms => action_flags.push({ category: 'sessions', type: 'session', target: ms.hsf, month: ms.month }));
     }
+    if (notLiveSessionMonths.length > 0) {
+        notLiveSessionMonths.forEach(ms => action_flags.push({ category: 'sessions', type: 'session_not_live', target: ms.hsf, month: ms.month }));
+    }
     if (missingWebinarNames.length > 0) {
         missingWebinarNames.forEach(mw => action_flags.push({ category: 'webinars', type: 'webinar', subType: 'Webinar', target: mw, isFlagged: true }));
     }
@@ -409,8 +427,7 @@ export function calculateDynamicMetrics(af, reportingMonth) {
         missingAfmNames.forEach(ma => action_flags.push({ category: 'afm_other', type: 'afm', subType: 'AFM', target: ma, isFlagged: true }));
     }
 
-    if (lowQa > 0) action_flags.push({ category: 'action_items', type: 'qa', target: 'low_qa' });
-    if (lowQa > 0) action_flags.push('Low QA');
+    if (lowQa > 0) action_flags.push({ category: 'action_items', type: 'qa', target: 'low_qa', isFlagged: true });
 
     return {
         current_session_pct: monthSessionsTotal > 0 ? (monthSessionsCompleted / monthSessionsTotal) * 100 : 0,
@@ -423,6 +440,8 @@ export function calculateDynamicMetrics(af, reportingMonth) {
         is_contacted_today,
         missing_sessions_count: missingMonthSessions,
         missing_past_sessions_count: missingPastSessionsCount,
+        not_live_sessions_count: notLiveMonthSessions,
+        not_live_past_sessions_count: notLivePastSessionsCount,
         missing_webinars_count: missingMonthWebinars,
         missing_past_webinars_count: missingPastWebinarsCount,
         has_missing_fafsa: missingFafsas.length > 0,
