@@ -38,7 +38,8 @@ function App() {
     return saved ? JSON.parse(saved) : {
       assignedHAF: [],
       quality: [],
-      flags: []
+      flags: [],
+      manualSelected: []
     };
   });
 
@@ -295,7 +296,7 @@ function App() {
         {activeTab === 'dashboard' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <TopDashboard data={activeAfs} filters={filters} reportingMonth={reportingMonth} />
-            <MasterTable data={activeAfs} filters={filters} reportingMonth={reportingMonth} />
+            <MasterTable data={activeAfs} filters={filters} setFilters={setFilters} reportingMonth={reportingMonth} />
           </div>
         )}
 
@@ -315,14 +316,38 @@ function App() {
       {/* Outreach Gating Modal */}
       {showOutreachModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999 }}>
-          <div className="card" style={{ padding: '32px', maxWidth: '400px', width: '100%', textAlign: 'center' }}>
-            <h3 style={{ marginTop: 0, color: 'var(--text-primary)' }}>No outreach filters selected</h3>
-            <p style={{ color: 'var(--text-muted)', fontSize: '14px', lineHeight: 1.5, marginBottom: '24px' }}>
-              You haven’t selected any outreach options yet. Choose one or more filters above (like Missing Sessions or Missing Webinars) to build a targeted outreach list.
-            </p>
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+          <div className="card" style={{ padding: '32px', maxWidth: '400px', width: '100%', textAlign: 'center', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+            {(filters.manualSelected || []).length > 0 ? (
+              <>
+                <h3 style={{ marginTop: 0, color: 'var(--text-primary)' }}>Manual Selection Active</h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '14px', lineHeight: 1.5, marginBottom: '16px' }}>
+                  You have manually selected the following {filters.manualSelected.length} AFs:
+                </p>
+                <div style={{ background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '12px', maxHeight: '200px', overflowY: 'auto', textAlign: 'left', marginBottom: '24px' }}>
+                  {filters.manualSelected.map(email => {
+                    const af = activeAfs?.find(a => a.email === email);
+                    return (
+                      <div key={email} style={{ padding: '4px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: '13px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--accent-cyan)' }}></div>
+                        {af ? af.fullName : email}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              <>
+                <h3 style={{ marginTop: 0, color: 'var(--text-primary)' }}>No outreach filters selected</h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '14px', lineHeight: 1.5, marginBottom: '24px' }}>
+                  You haven’t selected any outreach options yet. Choose one or more filters above (like Missing Sessions or Missing Webinars) to build a targeted outreach list.
+                </p>
+              </>
+            )}
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: 'auto' }}>
               <button className="btn" onClick={() => setShowOutreachModal(false)}>Go back / Cancel</button>
-              <button className="btn btn-primary" onClick={() => { setShowOutreachModal(false); setActiveTab('outreach'); }}>Continue anyway</button>
+              <button className="btn btn-primary" onClick={() => { setShowOutreachModal(false); setActiveTab('outreach'); }}>
+                {(filters.manualSelected || []).length > 0 ? 'Proceed to Workspace' : 'Continue anyway'}
+              </button>
             </div>
           </div>
         </div>

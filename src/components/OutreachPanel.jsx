@@ -48,6 +48,12 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                 });
             });
         }
+
+        // Manual Selection Logic: Only filter down if no flags are active AND manual selection has emails
+        if ((filters.flags || []).length === 0 && (filters.manualSelected || []).length > 0) {
+            filtered = filtered.filter(row => filters.manualSelected.includes(row.email));
+        }
+
         return filtered;
     }, [data, filters]);
 
@@ -633,7 +639,8 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                             {filters.assignedHAF?.length > 0 && <li>HAFs: {filters.assignedHAF.join(', ')}</li>}
                             {filters.quality?.length > 0 && <li>QA: {filters.quality.join(', ')}</li>}
                             {filters.flags?.length > 0 && <li>Needs Attention: {filters.flags.map(f => f.replace('_', ' ')).join(', ')}</li>}
-                            {filters.assignedHAF?.length === 0 && filters.quality?.length === 0 && filters.flags?.length === 0 && <li>No active filters (All Data)</li>}
+                            {(filters.flags || []).length === 0 && (filters.manualSelected || []).length > 0 && <li>Manually Selected: {filters.manualSelected.length} AFs</li>}
+                            {filters.assignedHAF?.length === 0 && filters.quality?.length === 0 && filters.flags?.length === 0 && (filters.manualSelected || []).length === 0 && <li>No active filters (All Data)</li>}
                         </ul>
                     </div>
                 </div>

@@ -17,11 +17,7 @@ const getTextColor = (pct) => {
     return 'var(--warning)';
 };
 
-export default function MasterTable({ data, filters, reportingMonth }) {
-    const [hiddenAFs, setHiddenAFs] = useState(() => {
-        const saved = localStorage.getItem('hiddenAFs');
-        return saved ? new Set(JSON.parse(saved)) : new Set();
-    });
+export default function MasterTable({ data, filters, setFilters, reportingMonth }) {
 
     const [expandedRows, setExpandedRows] = useState(new Set());
     const [quickOutreachOpen, setQuickOutreachOpen] = useState(null); // email string of active quick outreach
@@ -30,17 +26,15 @@ export default function MasterTable({ data, filters, reportingMonth }) {
     // Sort logic, default by Urgency Score DESC
     const [sortConfig, setSortConfig] = useState({ key: 'urgency_score', direction: 'desc' });
 
-    useEffect(() => {
-        localStorage.setItem('hiddenAFs', JSON.stringify(Array.from(hiddenAFs)));
-    }, [hiddenAFs]);
-
-    const toggleHide = (e, email) => {
+    const toggleManualSelect = (e, email) => {
         e.stopPropagation();
-        setHiddenAFs(prev => {
-            const next = new Set(prev);
-            if (next.has(email)) next.delete(email);
-            else next.add(email);
-            return next;
+        setFilters(prev => {
+            const current = prev.manualSelected || [];
+            const isSelected = current.includes(email);
+            return {
+                ...prev,
+                manualSelected: isSelected ? current.filter(e => e !== email) : [...current, email]
+            };
         });
     };
 
@@ -71,7 +65,7 @@ export default function MasterTable({ data, filters, reportingMonth }) {
 
     const processedData = useMemo(() => {
         if (!data) return [];
-        let filtered = data.filter(row => !hiddenAFs.has(row.email) && !row.is_archived);
+        let filtered = data.filter(row => !row.is_archived);
 
         if (filters.assignedHAF?.length > 0) {
             filtered = filtered.filter(row => filters.assignedHAF.includes(row.assigned_haf));
@@ -124,7 +118,7 @@ export default function MasterTable({ data, filters, reportingMonth }) {
             if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
             return 0;
         });
-    }, [data, hiddenAFs, filters, sortConfig]);
+    }, [data, filters, sortConfig]);
 
     const getRecommendedAction = (af) => {
         if (af.missing_sessions_count > 0) return `Text reminder for missing session [${reportingMonth}]`;
@@ -214,6 +208,9 @@ export default function MasterTable({ data, filters, reportingMonth }) {
                         const hasHsfs = af.mentorships && af.mentorships.length > 0;
                         const hasStaleData = new Date(af.last_file_update).getTime() < (Date.now() - (48 * 60 * 60 * 1000));
 
+                        const canManuallySelect = (filters?.flags || []).length === 0;
+                        const isManuallySelected = (filters?.manualSelected || []).includes(af.email);
+
                         return (
                             <React.Fragment key={af.email}>
                                 <tr
@@ -228,9 +225,15 @@ export default function MasterTable({ data, filters, reportingMonth }) {
                                     <td>
                                         <div className="stack-cell">
                                             <span className="stack-main" style={{ color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                <button onClick={(e) => toggleHide(e, af.email)} className="btn" style={{ padding: '0', background: 'transparent', border: 'none', display: 'flex', alignItems: 'center' }} title="Hide/Archive">
-                                                    <XCircle size={14} color="var(--text-muted)" style={{ opacity: 0.5 }} />
-                                                </button>
+                                                {canManuallySelect && (
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isManuallySelected}
+                                                        onChange={(e) => toggleManualSelect(e, af.email)}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        style={{ cursor: 'pointer', accentColor: 'var(--accent-cyan)' }}
+                                                    />
+                                                )}
                                                 {hasHsfs && (isExpanded ? <ChevronDown size={14} color="var(--accent-cyan)" /> : <ChevronRight size={14} color="var(--accent-cyan)" />)}
                                                 <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '140px' }} title={af.fullName || af.email}>
                                                     {af.fullName || af.email}
@@ -312,7 +315,6 @@ export default function MasterTable({ data, filters, reportingMonth }) {
                                                                     borderRadius: '6px',
                                                                     border: `2px solid ${borderColor}`,
                                                                     cursor: 'pointer',
-                                                                    opacity: (selectedStudents[af.email] && !isSelected) ? 0.4 : 1,
                                                                     transition: 'all 0.2s ease',
                                                                     boxShadow: isSelected ? `0 0 8px ${borderColor}40` : 'none'
                                                                 }}
@@ -425,14 +427,6 @@ export default function MasterTable({ data, filters, reportingMonth }) {
                     })}
                 </tbody>
             </table>
-            {hiddenAFs.size > 0 && (
-                <div style={{ padding: '12px 16px', background: 'var(--bg-main)', borderTop: '1px solid var(--border-color)', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span className="text-muted">Hidden: {hiddenAFs.size} AFs</span>
-                    <button className="btn" style={{ padding: '2px 8px', fontSize: '10px' }} onClick={() => setHiddenAFs(new Set())}>
-                        Unhide All
-                    </button>
-                </div>
-            )}
         </div>
     );
 }

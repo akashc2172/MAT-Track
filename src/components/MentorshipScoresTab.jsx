@@ -18,7 +18,6 @@ const StatCell = ({ value, label, color }) => (
 );
 
 export default function MentorshipScoresTab({ data, filters, reportingMonth }) {
-    const [hiddenAFs, setHiddenAFs] = useState(new Set());
     const [expandedRows, setExpandedRows] = useState(new Set());
     const [selectedStudents, setSelectedStudents] = useState({});
 
@@ -55,7 +54,7 @@ export default function MentorshipScoresTab({ data, filters, reportingMonth }) {
 
     const processedData = useMemo(() => {
         if (!data) return [];
-        let filtered = data.filter(row => !row.is_archived && !hiddenAFs.has(row.email));
+        let filtered = data.filter(row => !row.is_archived);
 
         // Apply standard HAF/QA filters
         if (filters?.assignedHAF?.length > 0) {
@@ -82,7 +81,7 @@ export default function MentorshipScoresTab({ data, filters, reportingMonth }) {
 
         // Default sort by Urgency for this view as well
         return filtered.sort((a, b) => (b.urgency_score || 0) - (a.urgency_score || 0));
-    }, [data, hiddenAFs, filters, activeColors, reportingMonth]);
+    }, [data, filters, activeColors, reportingMonth]);
 
 
     return (
@@ -232,7 +231,7 @@ export default function MentorshipScoresTab({ data, filters, reportingMonth }) {
                                                                         borderRadius: '6px',
                                                                         border: `2px solid ${borderColor}`,
                                                                         cursor: 'pointer',
-                                                                        opacity: matchesFilter ? ((selectedStudents[af.email] && !isSelected) ? 0.4 : 1) : 0.3, // Fade out non-matching 
+                                                                        opacity: matchesFilter ? 1 : 0.3, // Fade out non-matching 
                                                                         transition: 'all 0.2s ease',
                                                                         boxShadow: isSelected ? `0 0 8px ${borderColor}40` : 'none'
                                                                     }}
