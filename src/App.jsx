@@ -323,7 +323,7 @@ function App() {
                 <p style={{ color: 'var(--text-muted)', fontSize: '14px', lineHeight: 1.5, marginBottom: '16px' }}>
                   You have manually selected the following {filters.manualSelected.length} AFs:
                 </p>
-                <div style={{ background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '12px', maxHeight: '200px', overflowY: 'auto', textAlign: 'left', marginBottom: '24px' }}>
+                <div style={{ background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '12px', textAlign: 'left', marginBottom: '24px' }}>
                   {filters.manualSelected.map(email => {
                     const af = activeAfs?.find(a => a.email === email);
                     return (
