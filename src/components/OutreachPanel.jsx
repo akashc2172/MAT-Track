@@ -140,8 +140,9 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
             return "";
         }
         return filteredData.filter(d => {
-            const hasAnyMissing = !getReplacedMessage(d, false).includes('[NO MISSING OBLIGATIONS MATCHING FILTERS]');
-            return hasAnyMissing;
+            const isMissingStandard = !getReplacedMessage(d, false).includes('[NO MISSING OBLIGATIONS MATCHING FILTERS]');
+            const hasNeedsAttention = isMissingStandard || (d.action_flags || []).some(f => f.type === 'session_not_live');
+            return hasNeedsAttention;
         }).map(d => d.email).filter(Boolean).join(', ');
     };
 
@@ -476,8 +477,9 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
     const confirmAndExportCSV = () => {
 
         const validAFs = filteredData.filter(af => {
-            const hasAnyMissing = !getReplacedMessage(af, false).includes('[NO MISSING OBLIGATIONS MATCHING FILTERS]');
-            return hasAnyMissing;
+            const isMissingStandard = !getReplacedMessage(af, false).includes('[NO MISSING OBLIGATIONS MATCHING FILTERS]');
+            const hasNeedsAttention = isMissingStandard || (af.action_flags || []).some(f => f.type === 'session_not_live');
+            return hasNeedsAttention;
         });
 
         const headers = ["Email", "FirstName", "FullName", "Subject", "Message", "CC", "Assigned HAF", "Quality Assessment"];
@@ -852,7 +854,7 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                                             </div>
 
                                             <div style={{ fontSize: '12px', color: 'var(--text-primary)', background: 'rgba(0,0,0,0.1)', padding: '12px', borderRadius: '4px', whiteSpace: 'pre-wrap' }}>
-                                                {hasAnyMissing ? strictMsg : <span style={{ color: 'var(--text-muted)' }}>[NO MISSING OBLIGATIONS MATCHING FILTERS]</span>}
+                                                {hasNeedsAttention ? strictMsg : <span style={{ color: 'var(--text-muted)' }}>[NO MISSING OBLIGATIONS MATCHING FILTERS]</span>}
                                             </div>
 
                                             {msgValidation && (
