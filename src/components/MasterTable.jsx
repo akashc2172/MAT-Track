@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { EyeOff, ChevronDown, ChevronRight, Activity, Clock, CheckCircle, XCircle, MessageSquare, Copy, Smartphone, Mail } from 'lucide-react';
 import { db } from '../utils/db.js';
+import { getMentorshipNeedsAttentionItems, getMentorshipScore, getMentorshipColorColor } from '../utils/scoring.js';
 
 const getHeatmapColor = (pct) => {
     if (pct === undefined || pct === null) return 'var(--bg-card)';
@@ -24,6 +25,7 @@ export default function MasterTable({ data, filters, reportingMonth }) {
 
     const [expandedRows, setExpandedRows] = useState(new Set());
     const [quickOutreachOpen, setQuickOutreachOpen] = useState(null); // email string of active quick outreach
+    const [selectedStudents, setSelectedStudents] = useState({}); // af.email -> student name
 
     // Sort logic, default by Urgency Score DESC
     const [sortConfig, setSortConfig] = useState({ key: 'urgency_score', direction: 'desc' });
@@ -47,6 +49,15 @@ export default function MasterTable({ data, filters, reportingMonth }) {
             const next = new Set(prev);
             if (next.has(email)) next.delete(email);
             else next.add(email);
+            return next;
+        });
+    };
+
+    const toggleStudent = (email, hsfName) => {
+        setSelectedStudents(prev => {
+            const next = { ...prev };
+            if (next[email] === hsfName) delete next[email];
+            else next[email] = hsfName;
             return next;
         });
     };
@@ -285,14 +296,34 @@ export default function MasterTable({ data, filters, reportingMonth }) {
                                                 <h4 style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '12px', fontWeight: '800' }}>Assigned Students ({af.mentorships.length})</h4>
 
                                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '8px', marginBottom: '16px' }}>
-                                                    {af.mentorships.map(m => (
-                                                        <div key={m.mentorshipId} style={{ background: 'var(--bg-card)', padding: '10px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
-                                                            <div style={{ fontWeight: '700', fontSize: '11px', color: 'var(--text-primary)', marginBottom: '4px' }}>{m.hsfName}</div>
-                                                            <div style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'flex', gap: '8px' }}>
-                                                                {m.milestones?.fafsa && <span>FAFSA: {m.milestones.fafsa}</span>}
+                                                    {af.mentorships.map(m => {
+                                                        const score = getMentorshipScore(af, m, reportingMonth);
+                                                        const borderColor = getMentorshipColorColor(score);
+
+                                                        const isSelected = selectedStudents[af.email] === m.hsfName;
+
+                                                        return (
+                                                            <div
+                                                                key={m.mentorshipId}
+                                                                onClick={() => toggleStudent(af.email, m.hsfName)}
+                                                                style={{
+                                                                    background: isSelected ? 'rgba(255,255,255,0.05)' : 'var(--bg-card)',
+                                                                    padding: '10px',
+                                                                    borderRadius: '6px',
+                                                                    border: `2px solid ${borderColor}`,
+                                                                    cursor: 'pointer',
+                                                                    opacity: (selectedStudents[af.email] && !isSelected) ? 0.4 : 1,
+                                                                    transition: 'all 0.2s ease',
+                                                                    boxShadow: isSelected ? `0 0 8px ${borderColor}40` : 'none'
+                                                                }}
+                                                            >
+                                                                <div style={{ fontWeight: '700', fontSize: '11px', color: 'var(--text-primary)', marginBottom: '4px' }}>{m.hsfName}</div>
+                                                                <div style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'flex', gap: '8px' }}>
+                                                                    {m.milestones?.fafsa && <span>FAFSA: {m.milestones.fafsa}</span>}
+                                                                </div>
                                                             </div>
-                                                        </div>
-                                                    ))}
+                                                        );
+                                                    })}
                                                 </div>
 
                                                 {Object.keys(af.webinars || {}).length > 0 && (
@@ -322,8 +353,30 @@ export default function MasterTable({ data, filters, reportingMonth }) {
                                                     <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
                                                         <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--warning)' }}>Needs Attention:</span>
                                                         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                                                            {(af.action_flags || []).length > 0 ? (af.action_flags || []).map((flagObj, idx) => {
-                                                                if (!flagObj || typeof flagObj !== 'object') return null;
+                                                            {(af.action_flags || []).length > 0 ? (af.action_flags || []).filter(flagObj => {
+                                                                const selStudent = selectedStudents[af.email];
+                                                                if (!selStudent) return true;
+
+                                                                if (flagObj.category === 'sessions' && flagObj.target === selStudent) return true;
+                                                                if (flagObj.category === 'action_items' && flagObj.type === 'milestone' && (flagObj.hsfNames || []).includes(selStudent)) return true;
+                                                                // If a student is selected, hide the global AF-level tags so Need Attention only shows student items
+                                                                return false;
+                                                            }).flatMap((flagObj, idx) => {
+                                                                if (!flagObj || typeof flagObj !== 'object') return [];
+
+                                                                if (flagObj.type === 'milestone') {
+                                                                    const selStudent = selectedStudents[af.email];
+                                                                    const studentsToRender = selStudent && (flagObj.hsfNames || []).includes(selStudent)
+                                                                        ? [selStudent]
+                                                                        : (flagObj.hsfNames || ['Unknown']);
+
+                                                                    return studentsToRender.map((studentName, s_idx) => (
+                                                                        <span key={`${idx}-${s_idx}`} style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>
+                                                                            {`Missing ${flagObj.target} (${studentName})`}
+                                                                        </span>
+                                                                    ));
+                                                                }
+
                                                                 let displayFlag = '';
                                                                 let isDanger = true;
 
@@ -339,19 +392,16 @@ export default function MasterTable({ data, filters, reportingMonth }) {
                                                                 } else if (flagObj.type === 'afm') {
                                                                     displayFlag = `Missing AFM: ${flagObj.target}`;
                                                                     isDanger = true;
-                                                                } else if (flagObj.type === 'milestone') {
-                                                                    displayFlag = `Missing ${flagObj.target}`;
-                                                                    isDanger = true;
                                                                 } else if (flagObj.type === 'qa') {
                                                                     displayFlag = 'Low QA';
                                                                     isDanger = false;
                                                                 }
 
-                                                                return (
+                                                                return [
                                                                     <span key={idx} style={{ background: isDanger ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)', color: isDanger ? 'var(--danger)' : 'var(--warning)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>
                                                                         {displayFlag}
                                                                     </span>
-                                                                );
+                                                                ];
                                                             }) : <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>None - On track!</span>}
                                                         </div>
                                                     </div>

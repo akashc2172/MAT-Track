@@ -10,6 +10,7 @@ import MasterTable from './components/MasterTable.jsx';
 import FilterBar from './components/FilterBar.jsx';
 import OutreachPanel from './components/OutreachPanel.jsx';
 import TopDashboard from './components/TopDashboard.jsx';
+import MentorshipScoresTab from './components/MentorshipScoresTab.jsx';
 
 function App() {
   const [auditStats, setAuditStats] = useState(null);
@@ -277,6 +278,12 @@ function App() {
               Dashboard
             </button>
             <button
+              className={`tab-btn ${activeTab === 'scores' ? 'active' : ''}`}
+              onClick={() => handleTabSwitch('scores')}
+            >
+              Mentorship Scores
+            </button>
+            <button
               className={`tab-btn ${activeTab === 'outreach' ? 'active' : ''}`}
               onClick={() => handleTabSwitch('outreach')}
             >
@@ -285,12 +292,20 @@ function App() {
           </nav>
         </div>
 
-        {activeTab === 'dashboard' ? (
+        {activeTab === 'dashboard' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <TopDashboard data={activeAfs} filters={filters} reportingMonth={reportingMonth} />
             <MasterTable data={activeAfs} filters={filters} reportingMonth={reportingMonth} />
           </div>
-        ) : (
+        )}
+
+        {activeTab === 'scores' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <MentorshipScoresTab data={activeAfs} filters={filters} reportingMonth={reportingMonth} />
+          </div>
+        )}
+
+        {activeTab === 'outreach' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <OutreachPanel data={activeAfs} filters={filters} setFilters={setFilters} reportingMonth={reportingMonth} />
           </div>
