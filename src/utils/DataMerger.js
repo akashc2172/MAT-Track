@@ -57,7 +57,12 @@ export const resolveMonthYear = (monthName, isY1 = false, isY2 = false) => {
     } else if (isY2) {
         year = 2026;
     } else {
-        year = (monthIndex >= 8) ? 2025 : 2026;
+        // Fallback for unlabeled columns (like September/October Status)
+        // User says August is from 2025.
+        // So everything from August (7) to December (11) without a label is 2025.
+        // Everything from January (0) to July (6) without a label is 2026.
+        if (monthIndex >= 7) year = 2025;
+        else year = 2026;
     }
 
     const key = `${monthName} ${year}`;
