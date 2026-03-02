@@ -44,24 +44,20 @@ export function parseText(text, filename) {
     throw new Error(`Unsupported file format: ${filename}`);
 }
 
-export const resolveMonthYear = (monthName, isY1 = false) => {
+export const resolveMonthYear = (monthName, isY1 = false, isY2 = false) => {
     const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     const monthIndex = months.indexOf(monthName);
     if (monthIndex === -1) return { month: monthName, year: 2026, key: monthName, ordinal: 0 };
 
-    // Standard Cycle: March 2025 (Y1) -> February 2026 (Y1) 
-    // Wait, user says March Y1 is 2025. And August is the switch to Y2 usually.
-    // Let's stick to the user's specific mapping:
-    // March to December Y1 = 2025
-    // January to August Y2 (no label) = 2026
-
-    let year = 2026;
+    // Y1 = 2025, Y2 = 2026
+    // No label: Sep-Dec = 2025, Jan-Aug = 2026
+    let year;
     if (isY1) {
         year = 2025;
+    } else if (isY2) {
+        year = 2026;
     } else {
-        // Fallback for unlabeled columns: September-December are likely 2025
-        if (monthIndex >= 8) year = 2025;
-        else year = 2026;
+        year = (monthIndex >= 8) ? 2025 : 2026;
     }
 
     const key = `${monthName} ${year}`;
@@ -228,14 +224,15 @@ export function unifyReports(hafData = [], qaData = [], sessionData = [], afmDat
             Object.keys(row).forEach(key => {
                 if (key.includes('Session Status')) {
                     const isY1 = key.includes('Y1');
-                    const monthName = key.replace(' Session Status', '').replace(' Y1', '').trim();
-                    const { key: monthKey, ordinal } = resolveMonthYear(monthName, isY1);
+                    const isY2 = key.includes('Y2');
+                    const monthName = key.replace(' Session Status', '').replace(' Y1', '').replace(' Y2', '').trim();
+                    const { key: monthKey, ordinal } = resolveMonthYear(monthName, isY1, isY2);
                     if (ordinal > 0) {
                         mentorship.statuses[monthKey] = row[key];
                     }
                 } else if (key === 'September Status' || key === 'October Status') {
                     const monthName = key.replace(' Status', '').trim();
-                    const { key: monthKey } = resolveMonthYear(monthName, false);
+                    const { key: monthKey } = resolveMonthYear(monthName, false, false);
                     mentorship.statuses[monthKey] = row[key];
                 }
             });
