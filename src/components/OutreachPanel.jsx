@@ -10,6 +10,8 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
     const [recentlyCopied, setRecentlyCopied] = useState(new Set());
     const [justCopied, setJustCopied] = useState(null); // format: "type-email"
     const [showExportModal, setShowExportModal] = useState(false);
+    const [showHSFNames, setShowHSFNames] = useState(true);
+    const [individualHSFOverrides, setIndividualHSFOverrides] = useState({});
     const textareaRef = useRef(null);
 
     // Apply the same global filters to the Outreach selection
@@ -168,7 +170,7 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
         return sorted.slice(0, -1).join(', ') + ', and ' + sorted[sorted.length - 1];
     };
 
-    function formatSessionMonthList(monthMap) {
+    function formatSessionMonthList(monthMap, showHSF = true) {
         const months = Object.keys(monthMap).sort((a, b) => {
             const mOrder = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
             const [mA, yA] = a.split(' ');
@@ -180,7 +182,7 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
 
         let displayItems = months.map(m => {
             const hsfs = Array.from(monthMap[m] || []).filter(Boolean).sort();
-            const hsfStr = hsfs.length > 0 ? ` (${hsfs.join(', ')})` : '';
+            const hsfStr = (showHSF && hsfs.length > 0) ? ` (${hsfs.join(', ')})` : '';
             return m + hsfStr;
         });
 
@@ -191,8 +193,8 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
 
     function getReplacedMessage(af, strict = true) {
         let msg = message;
+        const currentHSFVisibility = individualHSFOverrides[af.email] ?? showHSFNames;
 
-        // Expose a base validation check
         if (!strict) {
             msg = '{MissingSummary}';
         }
@@ -338,8 +340,10 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                 const hsfStr = hsfs.length > 0 ? ` (${hsfs.join(', ')})` : '';
                 baseClauses.push(`your ${m}${yearStr}${hsfStr} session summary and webinar`);
             } else {
-                if (sessionMonthsArr.length > 0) baseClauses.push(`your ${formatSessionMonthList(sessionMap)} session ${sessionMonthsArr.length > 1 ? 'summaries' : 'summary'}`);
-                if (notLiveMonthsArr.length > 0) baseClauses.push(`your ${formatSessionMonthList(notLiveMap)} session ${notLiveMonthsArr.length > 1 ? 'summaries' : 'summary'} marked Completed - Not Live`);
+                const sessionSummaryStr = sessionMonthsArr.length > 0 ? `your ${formatSessionMonthList(sessionMap, currentHSFVisibility)} session ${sessionMonthsArr.length > 1 ? 'summaries' : 'summary'}` : '';
+                const notLiveSummaryStr = notLiveMonthsArr.length > 0 ? `your ${formatSessionMonthList(notLiveMap, currentHSFVisibility)} session ${notLiveMonthsArr.length > 1 ? 'summaries' : 'summary'} marked Completed - Not Live` : '';
+                if (sessionSummaryStr) baseClauses.push(sessionSummaryStr);
+                if (notLiveSummaryStr) baseClauses.push(notLiveSummaryStr);
                 if (webinarJoined) baseClauses.push(webinarJoined);
                 actionClauses.forEach(ac => baseClauses.push(ac));
             }
@@ -381,7 +385,7 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
             });
             const nlMonths = Object.keys(nlMap);
             if (nlMonths.length > 0) {
-                const monthStr = formatSessionMonthList(nlMap);
+                const monthStr = formatSessionMonthList(nlMap, currentHSFVisibility);
                 const suffix = nlMonths.length > 1 ? 'summaries marked Not Live' : 'summary marked Not Live';
                 msg = msg.replace(/\{NotLiveSessionsOnlySummary\}/g, `your ${monthStr} session ${suffix}`);
             } else {
@@ -394,7 +398,7 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
             const missingList = (af.action_flags || []).filter(f => f.type === 'session' && f.month === reportingMonth);
             if (missingList.length > 0) {
                 const map = { [reportingMonth]: new Set(missingList.map(f => f.target)) };
-                msg = msg.replace(/\{MissingSessions_Current\}/g, `missing session for ${formatSessionMonthList(map)}`);
+                msg = msg.replace(/\{MissingSessions_Current\}/g, `missing session for ${formatSessionMonthList(map, currentHSFVisibility)}`);
             } else {
                 msg = msg.replace(/\{MissingSessions_Current\}/g, `[No Missing Session for ${reportingMonth}]`);
             }
@@ -403,7 +407,7 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
             const nlList = (af.action_flags || []).filter(f => f.type === 'session_not_live' && f.month === reportingMonth);
             if (nlList.length > 0) {
                 const map = { [reportingMonth]: new Set(nlList.map(f => f.target)) };
-                msg = msg.replace(/\{NotLiveSessions_Current\}/g, `session summary for ${formatSessionMonthList(map)} marked Completed - Not Live`);
+                msg = msg.replace(/\{NotLiveSessions_Current\}/g, `session summary for ${formatSessionMonthList(map, currentHSFVisibility)} marked Completed - Not Live`);
             } else {
                 msg = msg.replace(/\{NotLiveSessions_Current\}/g, `[No Not Live Session for ${reportingMonth}]`);
             }
@@ -417,7 +421,7 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
             });
             const monthsArr = Object.keys(map).sort(sortMonths);
             if (monthsArr.length > 0) {
-                msg = msg.replace(/\{MissingSessions_Past\}/g, `missing session ${monthsArr.length > 1 ? 'summaries' : 'summary'} for ${formatSessionMonthList(map)}`);
+                msg = msg.replace(/\{MissingSessions_Past\}/g, `missing session ${monthsArr.length > 1 ? 'summaries' : 'summary'} for ${formatSessionMonthList(map, currentHSFVisibility)}`);
             } else {
                 msg = msg.replace(/\{MissingSessions_Past\}/g, '[No Missing Past Sessions]');
             }
@@ -430,7 +434,7 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
             });
             const monthsArr = Object.keys(map).sort(sortMonths);
             if (monthsArr.length > 0) {
-                msg = msg.replace(/\{NotLiveSessions_Past\}/g, `session ${monthsArr.length > 1 ? 'summaries' : 'summary'} for ${formatSessionMonthList(map)} marked Completed - Not Live`);
+                msg = msg.replace(/\{NotLiveSessions_Past\}/g, `session ${monthsArr.length > 1 ? 'summaries' : 'summary'} for ${formatSessionMonthList(map, currentHSFVisibility)} marked Completed - Not Live`);
             } else {
                 msg = msg.replace(/\{NotLiveSessions_Past\}/g, '[No Not Live Past Sessions]');
             }
@@ -442,7 +446,7 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                 const list = (af.action_flags || []).filter(f => f.type === 'session' && f.month === month);
                 if (list.length > 0) {
                     const map = { [month]: new Set(list.map(f => f.target)) };
-                    msg = msg.replaceAll(tag, `session for ${formatSessionMonthList(map)}`);
+                    msg = msg.replaceAll(tag, `session for ${formatSessionMonthList(map, currentHSFVisibility)}`);
                 } else {
                     msg = msg.replaceAll(tag, `[No Missing ${month} Session]`);
                 }
@@ -453,7 +457,7 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                 const list = (af.action_flags || []).filter(f => f.type === 'session_not_live' && f.month === month);
                 if (list.length > 0) {
                     const map = { [month]: new Set(list.map(f => f.target)) };
-                    msg = msg.replaceAll(nlTag, `session for ${formatSessionMonthList(map)} marked Completed - Not Live`);
+                    msg = msg.replaceAll(nlTag, `session for ${formatSessionMonthList(map, currentHSFVisibility)} marked Completed - Not Live`);
                 } else {
                     msg = msg.replaceAll(nlTag, `[No Not Live ${month} Session]`);
                 }
@@ -682,6 +686,21 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
 
                             <div style={{ height: '1px', background: 'var(--border-color)', opacity: 0.2, margin: '2px 0' }}></div>
 
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 8px', background: 'rgba(255,255,255,0.03)', borderRadius: '4px', alignSelf: 'flex-start' }}>
+                                <input
+                                    type="checkbox"
+                                    id="global_hsf_toggle"
+                                    checked={showHSFNames}
+                                    onChange={(e) => setShowHSFNames(e.target.checked)}
+                                    style={{ cursor: 'pointer' }}
+                                />
+                                <label htmlFor="global_hsf_toggle" style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-primary)', cursor: 'pointer' }}>
+                                    Show student names in parentheses (e.g. "March session (John Doe)")
+                                </label>
+                            </div>
+
+                            <div style={{ height: '1px', background: 'var(--border-color)', opacity: 0.2, margin: '2px 0' }}></div>
+
                             <details style={{ cursor: 'pointer', outline: 'none' }}>
                                 <summary style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-muted)', marginBottom: '8px', opacity: 0.8 }}>▶ Sessions (Granular Overrides)</summary>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', paddingLeft: '16px', background: 'rgba(0,0,0,0.1)', padding: '12px', borderRadius: '4px', paddingTop: '8px', paddingBottom: '8px' }}>
@@ -833,184 +852,200 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                                     borderLeft: `4px solid ${borderColor}`
                                 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                        <div>
-                                            <div style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--accent-cyan)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                {af.fullName}
-                                                <span style={{ fontSize: '10px', background: 'var(--bg-main)', padding: '2px 6px', borderRadius: '4px', color: 'var(--text-muted)' }}>{af.assigned_haf || 'Unassigned HAF'}</span>
-                                                <span style={{ fontSize: '10px', background: String(af.qa_status).includes('Not') ? 'rgba(239, 68, 68, 0.2)' : 'var(--bg-main)', color: String(af.qa_status).includes('Not') ? 'var(--danger)' : 'var(--text-muted)', padding: '2px 6px', borderRadius: '4px' }}>QA: {af.qa_status}</span>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                <h4 style={{ margin: 0, color: 'var(--accent-cyan)', fontSize: '15px' }}>{af.fullName}</h4>
+                                                <span style={{ fontSize: '10px', background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px', color: 'var(--text-muted)' }}>{af.assigned_haf || 'Unassigned'}</span>
+                                                {af.qa_status && (
+                                                    <span style={{
+                                                        fontSize: '10px',
+                                                        background: af.qa_status === 'Exceeding Expectations' || af.qa_status === 'Meeting Expectations' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                                                        color: af.qa_status === 'Exceeding Expectations' || af.qa_status === 'Meeting Expectations' ? 'var(--success)' : 'var(--danger)',
+                                                        padding: '2px 6px',
+                                                        borderRadius: '4px'
+                                                    }}>{af.qa_status}</span>
+                                                )}
                                             </div>
-                                            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px', display: 'flex', gap: '12px' }}>
-                                                {hasPhone && (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--text-muted)', fontSize: '12px', marginTop: '4px' }}>
+                                                {af.mobile && (
                                                     <span
-                                                        style={{
-                                                            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px',
-                                                            background: justCopied === `phone-${af.email}` ? 'var(--success)' : 'var(--bg-main)',
-                                                            color: justCopied === `phone-${af.email}` ? '#fff' : 'var(--text-muted)',
-                                                            padding: '2px 8px', borderRadius: '4px', border: '1px solid var(--border-color)',
-                                                            transition: 'all 0.2s ease'
-                                                        }}
+                                                        style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', background: justCopied === `phone-${af.email}` ? 'var(--success)' : 'transparent', color: justCopied === `phone-${af.email}` ? '#000' : 'inherit', padding: '1px 4px', borderRadius: '4px' }}
                                                         onClick={() => copyGeneral(af.mobile, `phone-${af.email}`)}
-                                                        title="Copy Phone"
                                                     >
-                                                        {justCopied === `phone-${af.email}` ? <><CheckCircle size={10} /> Copied!</> : <><Smartphone size={10} /> {af.mobile}</>}
+                                                        <Smartphone size={12} /> {af.mobile}
                                                     </span>
                                                 )}
-                                                <span
-                                                    style={{
-                                                        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px',
-                                                        background: justCopied === `email-${af.email}` ? 'var(--success)' : 'var(--bg-main)',
-                                                        color: justCopied === `email-${af.email}` ? '#fff' : 'var(--text-muted)',
-                                                        padding: '2px 8px', borderRadius: '4px', border: '1px solid var(--border-color)',
-                                                        transition: 'all 0.2s ease'
-                                                    }}
-                                                    onClick={() => copyGeneral(af.email, `email-${af.email}`)}
-                                                    title="Copy Email"
-                                                >
-                                                    {justCopied === `email-${af.email}` ? <><CheckCircle size={10} /> Copied!</> : <><Mail size={10} /> {af.email}</>}
-                                                </span>
+                                                {af.email && (
+                                                    <span
+                                                        style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', background: justCopied === `email-${af.email}` ? 'var(--success)' : 'transparent', color: justCopied === `email-${af.email}` ? '#000' : 'inherit', padding: '1px 4px', borderRadius: '4px' }}
+                                                        onClick={() => copyGeneral(af.email, `email-${af.email}`)}
+                                                    >
+                                                        <Mail size={12} /> {af.email}
+                                                    </span>
+                                                )}
                                             </div>
+                                        </div>
+
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px', background: 'rgba(255,255,255,0.03)', borderRadius: '4px' }}>
+                                            <input
+                                                type="checkbox"
+                                                id={`hsf_toggle_${af.email}`}
+                                                checked={individualHSFOverrides[af.email] ?? showHSFNames}
+                                                onChange={(e) => {
+                                                    setIndividualHSFOverrides(prev => ({
+                                                        ...prev,
+                                                        [af.email]: e.target.checked
+                                                    }));
+                                                }}
+                                                style={{ cursor: 'pointer', transform: 'scale(0.8)' }}
+                                            />
+                                            <label htmlFor={`hsf_toggle_${af.email}`} style={{ fontSize: '10px', fontWeight: 'bold', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                                                Show Names
+                                            </label>
                                         </div>
                                     </div>
 
-                                    {hasNeedsAttention ? (
-                                        <>
-                                            {/* Grouped Needs Attention Section */}
-                                            <div style={{ background: 'var(--bg-card)', borderRadius: '6px', padding: '12px', border: '1px dashed var(--border-color)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                                {/* Session Summaries */}
-                                                {(af.missing_sessions_count > 0 || af.missing_past_sessions_count > 0 || (af.action_flags || []).some(f => f.type === 'session')) && (
-                                                    <div style={{ display: 'flex', gap: '16px', alignItems: 'baseline' }}>
-                                                        <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--warning)', width: '120px' }}>Session Summaries:</span>
-                                                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-                                                            {af.missing_sessions_count > 0 && <span style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Missing Session [{reportingMonth}]</span>}
-                                                            {af.missing_past_sessions_count > 0 && <span style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Missing Past Sessions</span>}
+                                    {
+                                        hasNeedsAttention ? (
+                                            <>
+                                                {/* Grouped Needs Attention Section */}
+                                                <div style={{ background: 'var(--bg-card)', borderRadius: '6px', padding: '12px', border: '1px dashed var(--border-color)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                                    {/* Session Summaries */}
+                                                    {(af.missing_sessions_count > 0 || af.missing_past_sessions_count > 0 || (af.action_flags || []).some(f => f.type === 'session')) && (
+                                                        <div style={{ display: 'flex', gap: '16px', alignItems: 'baseline' }}>
+                                                            <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--warning)', width: '120px' }}>Session Summaries:</span>
+                                                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                                                {af.missing_sessions_count > 0 && <span style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Missing Session [{reportingMonth}]</span>}
+                                                                {af.missing_past_sessions_count > 0 && <span style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Missing Past Sessions</span>}
 
-                                                            {(af.missing_sessions_count > 0 || af.missing_past_sessions_count > 0) && (af.action_flags || []).some(f => f.type === 'session') && (
-                                                                <div style={{ width: '1px', height: '12px', background: 'var(--border-color)', margin: '0 4px', opacity: 0.5 }}></div>
-                                                            )}
+                                                                {(af.missing_sessions_count > 0 || af.missing_past_sessions_count > 0) && (af.action_flags || []).some(f => f.type === 'session') && (
+                                                                    <div style={{ width: '1px', height: '12px', background: 'var(--border-color)', margin: '0 4px', opacity: 0.5 }}></div>
+                                                                )}
 
-                                                            {Array.from(new Set((af.action_flags || []).filter(f => f.type === 'session').map(f => f.month))).sort((a, b) => {
-                                                                const m = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-                                                                return m.indexOf(a) - m.indexOf(b);
-                                                            }).map(month => (
-                                                                <span key={`af_sess_${month}`} style={{ background: 'rgba(245, 158, 11, 0.1)', color: 'var(--warning)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Missing {month}</span>
-                                                            ))}
+                                                                {Array.from(new Set((af.action_flags || []).filter(f => f.type === 'session').map(f => f.month))).sort((a, b) => {
+                                                                    const m = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                                                                    return m.indexOf(a) - m.indexOf(b);
+                                                                }).map(month => (
+                                                                    <span key={`af_sess_${month}`} style={{ background: 'rgba(245, 158, 11, 0.1)', color: 'var(--warning)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Missing {month}</span>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Not Live Sessions */}
+                                                    {(af.not_live_sessions_count > 0 || af.not_live_past_sessions_count > 0 || (af.action_flags || []).some(f => f.type === 'session_not_live')) && (
+                                                        <div style={{ display: 'flex', gap: '16px', alignItems: 'baseline' }}>
+                                                            <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--accent-gold)', width: '120px' }}>Not Live Sessions:</span>
+                                                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                                                {af.not_live_sessions_count > 0 && <span style={{ background: 'transparent', border: '1px solid var(--accent-gold)', color: 'var(--accent-gold)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Not Live Session [{reportingMonth}]</span>}
+                                                                {af.not_live_past_sessions_count > 0 && <span style={{ background: 'transparent', border: '1px solid var(--accent-gold)', color: 'var(--accent-gold)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Not Live Past Sessions</span>}
+
+                                                                {(af.not_live_sessions_count > 0 || af.not_live_past_sessions_count > 0) && (af.action_flags || []).some(f => f.type === 'session_not_live') && (
+                                                                    <div style={{ width: '1px', height: '12px', background: 'var(--border-color)', margin: '0 4px', opacity: 0.5 }}></div>
+                                                                )}
+
+                                                                {Array.from(new Set((af.action_flags || []).filter(f => f.type === 'session_not_live').map(f => f.month))).sort((a, b) => {
+                                                                    const m = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                                                                    return m.indexOf(a) - m.indexOf(b);
+                                                                }).map(month => (
+                                                                    <span key={`af_sess_nl_${month}`} style={{ background: 'transparent', border: '1px solid var(--accent-gold)', color: 'var(--accent-gold)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Not Live {month}</span>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Webinars */}
+                                                    {(af.missing_webinars_count > 0 || af.missing_past_webinars_count > 0 || (af.action_flags || []).some(f => f.type === 'webinar')) && (
+                                                        <div style={{ display: 'flex', gap: '16px', alignItems: 'baseline' }}>
+                                                            <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--warning)', width: '120px' }}>Webinars:</span>
+                                                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                                                {af.missing_webinars_count > 0 && <span style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Missing Webinar [{reportingMonth}]</span>}
+                                                                {af.missing_past_webinars_count > 0 && <span style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Missing Past Webinars</span>}
+
+                                                                {(af.missing_webinars_count > 0 || af.missing_past_webinars_count > 0) && (af.action_flags || []).some(f => f.type === 'webinar') && (
+                                                                    <div style={{ width: '1px', height: '12px', background: 'var(--border-color)', margin: '0 4px', opacity: 0.5 }}></div>
+                                                                )}
+
+                                                                {Array.from(new Set((af.action_flags || []).filter(f => f.type === 'webinar').map(f => f.target))).map(webinar => (
+                                                                    <span key={`af_web_${webinar}`} style={{ background: 'rgba(245, 158, 11, 0.1)', color: 'var(--warning)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Missing {webinar}</span>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Action Items */}
+                                                    {(af.has_missing_fafsa || af.has_missing_css || af.has_missing_college_app || String(af.qa_status).toLowerCase().includes('not') || (af.action_flags || []).some(f => f.type === 'afm')) && (
+                                                        <div style={{ display: 'flex', gap: '16px', alignItems: 'baseline' }}>
+                                                            <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--warning)', width: '120px' }}>Action Items / AFM:</span>
+                                                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                                                {af.has_missing_fafsa && <span style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Missing FAFSA</span>}
+                                                                {af.has_missing_css && <span style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Missing CSS Profile</span>}
+                                                                {af.has_missing_college_app && <span style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Missing College App</span>}
+                                                                {String(af.qa_status).toLowerCase().includes('not') && <span style={{ background: 'var(--danger)', color: '#fff', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Low QA Score</span>}
+
+                                                                {Array.from(new Set((af.action_flags || []).filter(f => f.type === 'afm').map(f => f.target))).map(afm => (
+                                                                    <span key={`af_afm_${afm}`} style={{ background: 'rgba(245, 158, 11, 0.1)', color: 'var(--warning)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Missing {afm}</span>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <div style={{ fontSize: '12px', color: 'var(--text-primary)', background: 'rgba(0,0,0,0.1)', padding: '12px', borderRadius: '4px', whiteSpace: 'pre-wrap' }}>
+                                                    {hasNeedsAttention ? strictMsg : <span style={{ color: 'var(--text-muted)' }}>[NO MISSING OBLIGATIONS MATCHING FILTERS]</span>}
+                                                </div>
+
+                                                {msgValidation && (
+                                                    <div style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', borderLeft: '2px solid var(--danger)', padding: '8px 12px', fontSize: '11px', display: 'flex', alignItems: 'flex-start', gap: '8px', marginTop: '4px' }}>
+                                                        <AlertCircle size={14} style={{ marginTop: '2px' }} />
+                                                        <div>
+                                                            <strong>Validation Error:</strong><br />
+                                                            {msgValidation.reasons.join(', ')}
                                                         </div>
                                                     </div>
                                                 )}
 
-                                                {/* Not Live Sessions */}
-                                                {(af.not_live_sessions_count > 0 || af.not_live_past_sessions_count > 0 || (af.action_flags || []).some(f => f.type === 'session_not_live')) && (
-                                                    <div style={{ display: 'flex', gap: '16px', alignItems: 'baseline' }}>
-                                                        <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--accent-gold)', width: '120px' }}>Not Live Sessions:</span>
-                                                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-                                                            {af.not_live_sessions_count > 0 && <span style={{ background: 'transparent', border: '1px solid var(--accent-gold)', color: 'var(--accent-gold)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Not Live Session [{reportingMonth}]</span>}
-                                                            {af.not_live_past_sessions_count > 0 && <span style={{ background: 'transparent', border: '1px solid var(--accent-gold)', color: 'var(--accent-gold)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Not Live Past Sessions</span>}
-
-                                                            {(af.not_live_sessions_count > 0 || af.not_live_past_sessions_count > 0) && (af.action_flags || []).some(f => f.type === 'session_not_live') && (
-                                                                <div style={{ width: '1px', height: '12px', background: 'var(--border-color)', margin: '0 4px', opacity: 0.5 }}></div>
-                                                            )}
-
-                                                            {Array.from(new Set((af.action_flags || []).filter(f => f.type === 'session_not_live').map(f => f.month))).sort((a, b) => {
-                                                                const m = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-                                                                return m.indexOf(a) - m.indexOf(b);
-                                                            }).map(month => (
-                                                                <span key={`af_sess_nl_${month}`} style={{ background: 'transparent', border: '1px solid var(--accent-gold)', color: 'var(--accent-gold)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Not Live {month}</span>
-                                                            ))}
+                                                {hasUnresolvedTokenNotice && (
+                                                    <div style={{ background: 'rgba(245, 158, 11, 0.1)', color: 'var(--warning)', borderLeft: '2px solid var(--warning)', padding: '8px 12px', fontSize: '11px', display: 'flex', alignItems: 'flex-start', gap: '8px', marginTop: '4px' }}>
+                                                        <AlertCircle size={14} style={{ marginTop: '2px' }} />
+                                                        <div>
+                                                            <strong>Notice:</strong><br />
+                                                            Unresolved token detected. Ensure you are using supported placeholders like {'{MissingSummary}'}.
                                                         </div>
                                                     </div>
                                                 )}
 
-                                                {/* Webinars */}
-                                                {(af.missing_webinars_count > 0 || af.missing_past_webinars_count > 0 || (af.action_flags || []).some(f => f.type === 'webinar')) && (
-                                                    <div style={{ display: 'flex', gap: '16px', alignItems: 'baseline' }}>
-                                                        <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--warning)', width: '120px' }}>Webinars:</span>
-                                                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-                                                            {af.missing_webinars_count > 0 && <span style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Missing Webinar [{reportingMonth}]</span>}
-                                                            {af.missing_past_webinars_count > 0 && <span style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Missing Past Webinars</span>}
-
-                                                            {(af.missing_webinars_count > 0 || af.missing_past_webinars_count > 0) && (af.action_flags || []).some(f => f.type === 'webinar') && (
-                                                                <div style={{ width: '1px', height: '12px', background: 'var(--border-color)', margin: '0 4px', opacity: 0.5 }}></div>
-                                                            )}
-
-                                                            {Array.from(new Set((af.action_flags || []).filter(f => f.type === 'webinar').map(f => f.target))).map(webinar => (
-                                                                <span key={`af_web_${webinar}`} style={{ background: 'rgba(245, 158, 11, 0.1)', color: 'var(--warning)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Missing {webinar}</span>
-                                                            ))}
-                                                        </div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                        <strong>Recommended Action:</strong> {getRecommendedAction(af)}
+                                                        {af.last_contact_date && <span style={{ color: 'var(--success)' }}>(Contacted)</span>}
                                                     </div>
-                                                )}
 
-                                                {/* Action Items */}
-                                                {(af.has_missing_fafsa || af.has_missing_css || af.has_missing_college_app || String(af.qa_status).toLowerCase().includes('not') || (af.action_flags || []).some(f => f.type === 'afm')) && (
-                                                    <div style={{ display: 'flex', gap: '16px', alignItems: 'baseline' }}>
-                                                        <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--warning)', width: '120px' }}>Action Items / AFM:</span>
-                                                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-                                                            {af.has_missing_fafsa && <span style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Missing FAFSA</span>}
-                                                            {af.has_missing_css && <span style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Missing CSS Profile</span>}
-                                                            {af.has_missing_college_app && <span style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Missing College App</span>}
-                                                            {String(af.qa_status).toLowerCase().includes('not') && <span style={{ background: 'var(--danger)', color: '#fff', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Low QA Score</span>}
-
-                                                            {Array.from(new Set((af.action_flags || []).filter(f => f.type === 'afm').map(f => f.target))).map(afm => (
-                                                                <span key={`af_afm_${afm}`} style={{ background: 'rgba(245, 158, 11, 0.1)', color: 'var(--warning)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Missing {afm}</span>
-                                                            ))}
-                                                        </div>
+                                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                                        <button className="btn" onClick={() => copyGeneral(strictMsg, `btn-msg-${af.email}`)} style={{
+                                                            fontSize: '11px', padding: '6px 12px',
+                                                            background: justCopied === `btn-msg-${af.email}` ? 'var(--success)' : '',
+                                                            color: justCopied === `btn-msg-${af.email}` ? '#fff' : ''
+                                                        }} disabled={!!msgValidation}>
+                                                            {justCopied === `btn-msg-${af.email}` ? <><CheckCircle size={12} /> Copied!</> : <><Copy size={12} /> Copy Message</>}
+                                                        </button>
+                                                        <button
+                                                            className={`btn ${isSuccess ? 'success' : 'btn-primary'}`}
+                                                            style={{ fontSize: '11px', padding: '6px 12px' }}
+                                                            onClick={() => copyToClipboardAndMarkContacted(strictMsg, af.email)}
+                                                            disabled={!!msgValidation}
+                                                        >
+                                                            {isSuccess ? <><CheckCircle size={12} /> Logged!</> : <>{hasPhone ? <Smartphone size={12} /> : <Mail size={12} />} {hasPhone ? 'Copy Text Message' : 'Copy Email Message'}</>}
+                                                        </button>
                                                     </div>
-                                                )}
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <div style={{ background: 'rgba(34, 197, 94, 0.1)', border: '1px dashed var(--success)', borderRadius: '6px', padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', color: 'var(--success)', fontWeight: 'bold' }}>
+                                                <CheckCircle size={16} /> Skipped - No Active Obligations
                                             </div>
-
-                                            <div style={{ fontSize: '12px', color: 'var(--text-primary)', background: 'rgba(0,0,0,0.1)', padding: '12px', borderRadius: '4px', whiteSpace: 'pre-wrap' }}>
-                                                {hasNeedsAttention ? strictMsg : <span style={{ color: 'var(--text-muted)' }}>[NO MISSING OBLIGATIONS MATCHING FILTERS]</span>}
-                                            </div>
-
-                                            {msgValidation && (
-                                                <div style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', borderLeft: '2px solid var(--danger)', padding: '8px 12px', fontSize: '11px', display: 'flex', alignItems: 'flex-start', gap: '8px', marginTop: '4px' }}>
-                                                    <AlertCircle size={14} style={{ marginTop: '2px' }} />
-                                                    <div>
-                                                        <strong>Validation Error:</strong><br />
-                                                        {msgValidation.reasons.join(', ')}
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {hasUnresolvedTokenNotice && (
-                                                <div style={{ background: 'rgba(245, 158, 11, 0.1)', color: 'var(--warning)', borderLeft: '2px solid var(--warning)', padding: '8px 12px', fontSize: '11px', display: 'flex', alignItems: 'flex-start', gap: '8px', marginTop: '4px' }}>
-                                                    <AlertCircle size={14} style={{ marginTop: '2px' }} />
-                                                    <div>
-                                                        <strong>Notice:</strong><br />
-                                                        Unresolved token detected. Ensure you are using supported placeholders like {'{MissingSummary}'}.
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                <div style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                    <strong>Recommended Action:</strong> {getRecommendedAction(af)}
-                                                    {af.last_contact_date && <span style={{ color: 'var(--success)' }}>(Contacted)</span>}
-                                                </div>
-
-                                                <div style={{ display: 'flex', gap: '8px' }}>
-                                                    <button className="btn" onClick={() => copyGeneral(strictMsg, `btn-msg-${af.email}`)} style={{
-                                                        fontSize: '11px', padding: '6px 12px',
-                                                        background: justCopied === `btn-msg-${af.email}` ? 'var(--success)' : '',
-                                                        color: justCopied === `btn-msg-${af.email}` ? '#fff' : ''
-                                                    }} disabled={!!msgValidation}>
-                                                        {justCopied === `btn-msg-${af.email}` ? <><CheckCircle size={12} /> Copied!</> : <><Copy size={12} /> Copy Message</>}
-                                                    </button>
-                                                    <button
-                                                        className={`btn ${isSuccess ? 'success' : 'btn-primary'}`}
-                                                        style={{ fontSize: '11px', padding: '6px 12px' }}
-                                                        onClick={() => copyToClipboardAndMarkContacted(strictMsg, af.email)}
-                                                        disabled={!!msgValidation}
-                                                    >
-                                                        {isSuccess ? <><CheckCircle size={12} /> Logged!</> : <>{hasPhone ? <Smartphone size={12} /> : <Mail size={12} />} {hasPhone ? 'Copy Text Message' : 'Copy Email Message'}</>}
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </>
-                                    ) : (
-                                        <div style={{ background: 'rgba(34, 197, 94, 0.1)', border: '1px dashed var(--success)', borderRadius: '6px', padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', color: 'var(--success)', fontWeight: 'bold' }}>
-                                            <CheckCircle size={16} /> Skipped - No Active Obligations
-                                        </div>
-                                    )}
+                                        )
+                                    }
                                 </div>
                             );
                         })}
@@ -1040,46 +1075,48 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
             </div >
 
             {/* Export Verification Modal */}
-            {showExportModal && (
-                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999 }}>
-                    <div className="card" style={{ padding: '32px', maxWidth: '600px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
-                        <h3 style={{ marginTop: 0, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <CheckCircle size={20} color="var(--accent-cyan)" /> Verify Mail Merge Details
-                        </h3>
-                        <p style={{ color: 'var(--text-muted)', fontSize: '13px', lineHeight: 1.5, marginBottom: '24px' }}>
-                            Please review your global configuration before downloading the CSV. These values will be applied to all {selectedCount} recipients in your export.
-                        </p>
+            {
+                showExportModal && (
+                    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999 }}>
+                        <div className="card" style={{ padding: '32px', maxWidth: '600px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+                            <h3 style={{ marginTop: 0, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <CheckCircle size={20} color="var(--accent-cyan)" /> Verify Mail Merge Details
+                            </h3>
+                            <p style={{ color: 'var(--text-muted)', fontSize: '13px', lineHeight: 1.5, marginBottom: '24px' }}>
+                                Please review your global configuration before downloading the CSV. These values will be applied to all {selectedCount} recipients in your export.
+                            </p>
 
-                        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '16px', marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                            <div>
-                                <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>SUBJECT LINE</span>
-                                <div style={{ fontSize: '14px', color: 'var(--text-primary)', fontWeight: '500' }}>{subject}</div>
-                            </div>
-
-                            {cc.trim() !== "" && (
+                            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '16px', marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                                 <div>
-                                    <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>CC ADDRESSES</span>
-                                    <div style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{cc}</div>
+                                    <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>SUBJECT LINE</span>
+                                    <div style={{ fontSize: '14px', color: 'var(--text-primary)', fontWeight: '500' }}>{subject}</div>
                                 </div>
-                            )}
 
-                            <div>
-                                <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>EMAIL BODY TEMPLATE</span>
-                                <div style={{ fontSize: '13px', color: 'var(--text-primary)', background: 'rgba(0,0,0,0.1)', padding: '12px', borderRadius: '4px', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
-                                    {message}
+                                {cc.trim() !== "" && (
+                                    <div>
+                                        <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>CC ADDRESSES</span>
+                                        <div style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{cc}</div>
+                                    </div>
+                                )}
+
+                                <div>
+                                    <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>EMAIL BODY TEMPLATE</span>
+                                    <div style={{ fontSize: '13px', color: 'var(--text-primary)', background: 'rgba(0,0,0,0.1)', padding: '12px', borderRadius: '4px', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
+                                        {message}
+                                    </div>
                                 </div>
                             </div>
-                        </div>
 
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-                            <button className="btn" onClick={() => setShowExportModal(false)}>Cancel & Go Back</button>
-                            <button className="btn success" onClick={confirmAndExportCSV} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <Download size={16} /> Confirm & Download CSV
-                            </button>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                                <button className="btn" onClick={() => setShowExportModal(false)}>Cancel & Go Back</button>
+                                <button className="btn success" onClick={confirmAndExportCSV} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <Download size={16} /> Confirm & Download CSV
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
         </div >
     );
 }
