@@ -344,6 +344,7 @@ export function calculateDynamicMetrics(af, reportingMonth) {
             totalSessions += 1;
             const completed = isCompleted(status);
             const notLive = isNotLive(status);
+            const isReportingMonth = reportingMonth && cleanMonth.toLowerCase().includes(reportingMonth.toLowerCase()) && !isY1;
 
             if (notLive) {
                 notLiveSessionMonths.push({ hsf: m.hsfName, month: month });
