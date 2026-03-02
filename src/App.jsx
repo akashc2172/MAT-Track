@@ -31,7 +31,7 @@ function App() {
   useEffect(() => { localStorage.setItem('databallr_tab', activeTab); }, [activeTab]);
 
   // UX Priority: Smart Defaults + Remembered Preferences
-  const [reportingMonth, setReportingMonth] = useState(() => localStorage.getItem('databallr_month') || new Date().toLocaleString('default', { month: 'long' }));
+  const [reportingMonth, setReportingMonth] = useState(() => localStorage.getItem('databallr_month') || 'March 2026');
 
   const [filters, setFilters] = useState(() => {
     const saved = localStorage.getItem('databallr_filters');
@@ -255,8 +255,12 @@ function App() {
               onChange={e => setReportingMonth(e.target.value)}
               style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: '12px', fontWeight: 'bold', outline: 'none', cursor: 'pointer' }}
             >
-              {['September', 'October', 'November', 'December', 'January', 'February', 'March', 'April', 'May'].map(m => (
-                <option key={m} value={m}>{m} 2026</option>
+              {[
+                'May 2026', 'April 2026', 'March 2026', 'February 2026', 'January 2026',
+                'December 2025', 'November 2025', 'October 2025', 'September 2025',
+                'August 2025', 'July 2025', 'June 2025', 'May 2025', 'April 2025', 'March 2025'
+              ].map(m => (
+                <option key={m} value={m}>{m}</option>
               ))}
             </select>
           </div>

@@ -77,9 +77,12 @@ export default function FilterBar({ data, filters, setFilters, reportingMonth })
                             <div style={{ width: '1px', height: '16px', background: 'var(--border-color)', margin: '0 8px', opacity: 0.5 }}></div>
                             {Array.from(new Set(data.flatMap(d => (d.action_flags || []).filter(f => f.category === 'sessions').map(f => f.month)))).sort((a, b) => {
                                 const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-                                return months.indexOf(a) - months.indexOf(b);
-                            }).map(month => (
-                                <Pill key={`sess_spec_${month}`} category="flags" value={`session_${month}`} label={`Missing Sessions [${month}]`} colorClass="var(--danger)" />
+                                const [mA, yA] = a.split(' ');
+                                const [mB, yB] = b.split(' ');
+                                if (yA !== yB) return parseInt(yA) - parseInt(yB);
+                                return months.indexOf(mA) - months.indexOf(mB);
+                            }).map(monthKey => (
+                                <Pill key={`sess_spec_${monthKey}`} category="flags" value={`session_${monthKey}`} label={`Missing [${monthKey}]`} colorClass="var(--danger)" />
                             ))}
                         </div>
                     </div>
@@ -95,9 +98,12 @@ export default function FilterBar({ data, filters, setFilters, reportingMonth })
                             <div style={{ width: '1px', height: '16px', background: 'var(--border-color)', margin: '0 8px', opacity: 0.5 }}></div>
                             {Array.from(new Set(data.flatMap(d => (d.action_flags || []).filter(f => f.type === 'session_not_live').map(f => f.month)))).sort((a, b) => {
                                 const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-                                return months.indexOf(a) - months.indexOf(b);
-                            }).map(month => (
-                                <Pill key={`not_live_${month}`} category="flags" value={`not_live_${month}`} label={`Not Live [${month}]`} colorClass="var(--accent-gold)" />
+                                const [mA, yA] = a.split(' ');
+                                const [mB, yB] = b.split(' ');
+                                if (yA !== yB) return parseInt(yA) - parseInt(yB);
+                                return months.indexOf(mA) - months.indexOf(mB);
+                            }).map(monthKey => (
+                                <Pill key={`not_live_${monthKey}`} category="flags" value={`not_live_${monthKey}`} label={`Not Live [${monthKey}]`} colorClass="var(--accent-gold)" />
                             ))}
                         </div>
                     </div>

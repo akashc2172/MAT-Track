@@ -69,10 +69,11 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
     }, [data]);
 
     // Calculate most recent month globally for the current cohort to power {MissingHsfs}
-    const monthOrder = ['September', 'October', 'November', 'December', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August'];
-    const allMonths = Array.from(new Set(
-        (data || []).flatMap(d => (d.mentorships || []).flatMap(m => Object.keys(m.statuses || {})))
-    )).sort((a, b) => monthOrder.indexOf(a) - monthOrder.indexOf(b));
+    const allMonths = [
+        'March 2025', 'April 2025', 'May 2025', 'June 2025', 'July 2025', 'August 2025',
+        'September 2025', 'October 2025', 'November 2025', 'December 2025',
+        'January 2026', 'February 2026', 'March 2026', 'April 2026', 'May 2026'
+    ];
 
     const mostRecentMonth = allMonths.length > 0 ? allMonths[allMonths.length - 1] : null;
 
@@ -153,46 +154,34 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
         }).map(d => d.email).filter(Boolean).join(', ');
     };
 
-    function getYearForMonth(monthName) {
-        const y2025 = ['March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-        const y2026 = ['January', 'February'];
-        if (y2025.includes(monthName)) return 2025;
-        if (y2026.includes(monthName)) return 2026;
-        return new Date().getFullYear();
-    }
-
-    function sortMonths(a, b) {
-        const ya = getYearForMonth(a);
-        const yb = getYearForMonth(b);
-        if (ya !== yb) return ya - yb;
-        return monthOrder.indexOf(a) - monthOrder.indexOf(b);
-    }
-
-    function formatMonthList(months) {
-        if (months.length === 0) return '';
-        const uniqueYears = new Set(months.map(m => getYearForMonth(m)));
-        const sameYear = uniqueYears.size === 1;
-
-        let displayMonths = months.map(m => {
-            if (!sameYear) return `${m} ${getYearForMonth(m)}`;
-            return m;
+    const formatMonthList = (months) => {
+        if (!months || months.length === 0) return '';
+        const mOrder = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const sorted = [...months].sort((a, b) => {
+            const [mA, yA] = a.split(' ');
+            const [mB, yB] = b.split(' ');
+            if (yA !== yB) return parseInt(yA) - parseInt(yB);
+            return mOrder.indexOf(mA) - mOrder.indexOf(mB);
         });
-
-        if (displayMonths.length === 1) return displayMonths[0];
-        if (displayMonths.length === 2) return `${displayMonths[0]} and ${displayMonths[1]}`;
-        return displayMonths.slice(0, -1).join(', ') + ', and ' + displayMonths[displayMonths.length - 1];
-    }
+        if (sorted.length === 1) return sorted[0];
+        if (sorted.length === 2) return sorted.join(' and ');
+        return sorted.slice(0, -1).join(', ') + ', and ' + sorted[sorted.length - 1];
+    };
 
     function formatSessionMonthList(monthMap) {
-        const months = Object.keys(monthMap).sort(sortMonths);
+        const months = Object.keys(monthMap).sort((a, b) => {
+            const mOrder = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+            const [mA, yA] = a.split(' ');
+            const [mB, yB] = b.split(' ');
+            if (yA !== yB) return parseInt(yA) - parseInt(yB);
+            return mOrder.indexOf(mA) - mOrder.indexOf(mB);
+        });
         if (months.length === 0) return '';
-        const uniqueYears = new Set(months.map(m => getYearForMonth(m)));
-        const sameYear = uniqueYears.size === 1;
 
         let displayItems = months.map(m => {
             const hsfs = Array.from(monthMap[m] || []).filter(Boolean).sort();
             const hsfStr = hsfs.length > 0 ? ` (${hsfs.join(', ')})` : '';
-            return (!sameYear ? `${m} ${getYearForMonth(m)}` : m) + hsfStr;
+            return m + hsfStr;
         });
 
         if (displayItems.length === 1) return displayItems[0];
@@ -247,8 +236,15 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                     }
                 });
             }
-            const sessionMonthsArr = Object.keys(sessionMap).sort(sortMonths);
-            const notLiveMonthsArr = Object.keys(notLiveMap).sort(sortMonths);
+            const sortFn = (a, b) => {
+                const mOrder = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                const [mA, yA] = a.split(' ');
+                const [mB, yB] = b.split(' ');
+                if (yA !== yB) return parseInt(yA) - parseInt(yB);
+                return mOrder.indexOf(mA) - mOrder.indexOf(mB);
+            };
+            const sessionMonthsArr = Object.keys(sessionMap).sort(sortFn);
+            const notLiveMonthsArr = Object.keys(notLiveMap).sort(sortFn);
 
             // --- 2. WEBINARS ---
             let webinarNames = [];

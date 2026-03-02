@@ -44,6 +44,32 @@ export function parseText(text, filename) {
     throw new Error(`Unsupported file format: ${filename}`);
 }
 
+export const resolveMonthYear = (monthName, isY1 = false) => {
+    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const monthIndex = months.indexOf(monthName);
+    if (monthIndex === -1) return { month: monthName, year: 2026, key: monthName, ordinal: 0 };
+
+    // Standard Cycle: March 2025 (Y1) -> February 2026 (Y1) 
+    // Wait, user says March Y1 is 2025. And August is the switch to Y2 usually.
+    // Let's stick to the user's specific mapping:
+    // March to December Y1 = 2025
+    // January to August Y2 (no label) = 2026
+
+    let year = 2026;
+    if (isY1) {
+        year = 2025;
+    } else {
+        // Fallback for unlabeled columns: September-December are likely 2025
+        if (monthIndex >= 8) year = 2025;
+        else year = 2026;
+    }
+
+    const key = `${monthName} ${year}`;
+    const ordinal = (year * 12) + monthIndex;
+
+    return { month: monthName, year, key, ordinal };
+};
+
 const EXCLUDED_EMAILS = [
     'phamkailani@gmail.com',
     'nicole.ershaghi@gmail.com',
@@ -60,22 +86,7 @@ const getCycleMonthOrdinal = (dateString) => {
 };
 
 const getStatusMonthOrdinal = (monthName, isY1 = false) => {
-    const y2025 = ['March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-    const y2026 = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August'];
-
-    // Explicitly check if it's Y1 (2025) vs Y2 (2026)
-    if (isY1 && y2025.includes(monthName)) {
-        return (2025 * 12) + y2025.indexOf(monthName) + 3;
-    }
-    if (!isY1 && y2026.includes(monthName)) {
-        return (2026 * 12) + y2026.indexOf(monthName) + 1;
-    }
-
-    // Fallback if no Y1 but it's clearly a 2025 month in the cycle
-    if (y2025.includes(monthName) && !y2026.includes(monthName)) return (2025 * 12) + y2025.indexOf(monthName) + 3;
-    if (y2026.includes(monthName)) return (2026 * 12) + y2026.indexOf(monthName) + 1;
-
-    return 0; // Unknown
+    return resolveMonthYear(monthName, isY1).ordinal;
 };
 
 export function unifyReports(hafData = [], qaData = [], sessionData = [], afmData = [], webinarData = [], aliasMap = new Map()) {
@@ -201,7 +212,7 @@ export function unifyReports(hafData = [], qaData = [], sessionData = [], afmDat
                 mentorship = {
                     mentorshipId: mentorshipId,
                     hsfName: row['HSF'] || 'Unknown HSF',
-                    startOrdinal: getCycleMonthOrdinal(row['Start of Current Relationship']),
+                    startOrdinal: row['Start of Current Relationship'] ? (new Date(row['Start of Current Relationship']).getFullYear() * 12 + new Date(row['Start of Current Relationship']).getMonth()) : 0,
                     statuses: {},
                     milestones: {}
                 };
@@ -217,15 +228,15 @@ export function unifyReports(hafData = [], qaData = [], sessionData = [], afmDat
             Object.keys(row).forEach(key => {
                 if (key.includes('Session Status')) {
                     const isY1 = key.includes('Y1');
-                    const month = key.replace(' Session Status', '').replace(' Y1', '').trim();
-                    const ordinal = getStatusMonthOrdinal(month, isY1);
+                    const monthName = key.replace(' Session Status', '').replace(' Y1', '').trim();
+                    const { key: monthKey, ordinal } = resolveMonthYear(monthName, isY1);
                     if (ordinal > 0) {
-                        const monthKey = `${month}${isY1 ? ' Y1' : ''}`;
                         mentorship.statuses[monthKey] = row[key];
                     }
                 } else if (key === 'September Status' || key === 'October Status') {
-                    const month = key.replace(' Status', '').trim();
-                    mentorship.statuses[month] = row[key];
+                    const monthName = key.replace(' Status', '').trim();
+                    const { key: monthKey } = resolveMonthYear(monthName, false);
+                    mentorship.statuses[monthKey] = row[key];
                 }
             });
 
@@ -329,14 +340,15 @@ export function calculateDynamicMetrics(af, reportingMonth) {
         if (!m.milestones?.css || String(m.milestones.css).toLowerCase().includes('not started') || String(m.milestones.css).toLowerCase().includes('missing')) missingCsses.push(hsf);
         if (!m.milestones?.collegeApp || String(m.milestones.collegeApp).toLowerCase().includes('not started') || String(m.milestones.collegeApp).toLowerCase().includes('missing')) missingApps.push(hsf);
 
-        Object.entries(m.statuses).forEach(([month, status]) => {
+        Object.entries(m.statuses).forEach(([monthKey, status]) => {
             if (isExcluded(status)) return;
 
-            // Check for Y1 suffix in the month key itself
-            const isY1 = month.includes('Y1');
-            const cleanMonth = month.replace(' Y1', '').trim();
+            // monthKey is now "March 2025" etc.
+            const [monthName, yearStr] = monthKey.split(' ');
+            const year = parseInt(yearStr);
+            const isY1 = year === 2025;
 
-            const statusOrdinal = getStatusMonthOrdinal(cleanMonth, isY1);
+            const { ordinal: statusOrdinal } = resolveMonthYear(monthName, isY1);
             if (m.startOrdinal > 0 && statusOrdinal > 0 && statusOrdinal < m.startOrdinal) {
                 return; // Exclude prior months from denominator
             }
@@ -344,13 +356,13 @@ export function calculateDynamicMetrics(af, reportingMonth) {
             totalSessions += 1;
             const completed = isCompleted(status);
             const notLive = isNotLive(status);
-            const isReportingMonth = reportingMonth && cleanMonth.toLowerCase().includes(reportingMonth.toLowerCase()) && !isY1;
+            const isReportingMonth = reportingMonth === monthKey;
 
             if (notLive) {
-                notLiveSessionMonths.push({ hsf: m.hsfName, month: month });
+                notLiveSessionMonths.push({ hsf: m.hsfName, month: monthKey });
                 if (isReportingMonth) {
                     notLiveMonthSessions += 1;
-                } else if (statusOrdinal > 0 && statusOrdinal < getStatusMonthOrdinal(reportingMonth, false)) {
+                } else if (statusOrdinal > 0 && statusOrdinal < resolveMonthYear(reportingMonth.split(' ')[0], reportingMonth.split(' ')[1] === '2025').ordinal) {
                     notLivePastSessionsCount += 1;
                 }
             }
@@ -358,10 +370,10 @@ export function calculateDynamicMetrics(af, reportingMonth) {
             if (completed) {
                 completedSessions += 1;
             } else if (status === '' || String(status).toLowerCase().includes('not completed') || String(status).toLowerCase().includes('not started') || String(status).toLowerCase() === 'no') {
-                missingSessionMonths.push({ hsf: m.hsfName, month: month });
+                missingSessionMonths.push({ hsf: m.hsfName, month: monthKey });
                 if (isReportingMonth) {
                     missingMonthSessions += 1;
-                } else if (statusOrdinal > 0 && statusOrdinal < getStatusMonthOrdinal(reportingMonth, false)) {
+                } else if (statusOrdinal > 0 && statusOrdinal < resolveMonthYear(reportingMonth.split(' ')[0], reportingMonth.split(' ')[1] === '2025').ordinal) {
                     missingPastSessionsCount += 1;
                 }
             }
