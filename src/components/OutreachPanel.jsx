@@ -337,7 +337,7 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                 const m = sessionMonthsArr[0];
                 const yearStr = ` ${getYearForMonth(m)}`;
                 const hsfs = Array.from(sessionMap[m] || []).filter(Boolean).sort();
-                const hsfStr = hsfs.length > 0 ? ` (${hsfs.join(', ')})` : '';
+                const hsfStr = (currentHSFVisibility && hsfs.length > 0) ? ` (${hsfs.join(', ')})` : '';
                 baseClauses.push(`your ${m}${yearStr}${hsfStr} session summary and webinar`);
             } else {
                 const sessionSummaryStr = sessionMonthsArr.length > 0 ? `your ${formatSessionMonthList(sessionMap, currentHSFVisibility)} session ${sessionMonthsArr.length > 1 ? 'summaries' : 'summary'}` : '';
