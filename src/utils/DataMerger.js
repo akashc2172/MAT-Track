@@ -59,12 +59,23 @@ const getCycleMonthOrdinal = (dateString) => {
     return (y * 12) + m;
 };
 
-const getStatusMonthOrdinal = (monthName) => {
+const getStatusMonthOrdinal = (monthName, isY1 = false) => {
     const y2025 = ['March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-    const y2026 = ['January', 'February'];
-    if (y2025.includes(monthName)) return (2025 * 12) + y2025.indexOf(monthName) + 3;
+    const y2026 = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August'];
+
+    // Explicitly check if it's Y1 (2025) vs Y2 (2026)
+    if (isY1 && y2025.includes(monthName)) {
+        return (2025 * 12) + y2025.indexOf(monthName) + 3;
+    }
+    if (!isY1 && y2026.includes(monthName)) {
+        return (2026 * 12) + y2026.indexOf(monthName) + 1;
+    }
+
+    // Fallback if no Y1 but it's clearly a 2025 month in the cycle
+    if (y2025.includes(monthName) && !y2026.includes(monthName)) return (2025 * 12) + y2025.indexOf(monthName) + 3;
     if (y2026.includes(monthName)) return (2026 * 12) + y2026.indexOf(monthName) + 1;
-    return 0; // Unknown month
+
+    return 0; // Unknown
 };
 
 export function unifyReports(hafData = [], qaData = [], sessionData = [], afmData = [], webinarData = [], aliasMap = new Map()) {
@@ -205,8 +216,13 @@ export function unifyReports(hafData = [], qaData = [], sessionData = [], afmDat
             // Dynamically grab all "Session Status" columns
             Object.keys(row).forEach(key => {
                 if (key.includes('Session Status')) {
+                    const isY1 = key.includes('Y1');
                     const month = key.replace(' Session Status', '').replace(' Y1', '').trim();
-                    mentorship.statuses[month] = row[key];
+                    const ordinal = getStatusMonthOrdinal(month, isY1);
+                    if (ordinal > 0) {
+                        const monthKey = `${month}${isY1 ? ' Y1' : ''}`;
+                        mentorship.statuses[monthKey] = row[key];
+                    }
                 } else if (key === 'September Status' || key === 'October Status') {
                     const month = key.replace(' Status', '').trim();
                     mentorship.statuses[month] = row[key];
@@ -325,7 +341,11 @@ export function calculateDynamicMetrics(af, reportingMonth) {
             totalSessions += 1;
             const completed = isCompleted(status);
             const notLive = isNotLive(status);
-            const isReportingMonth = reportingMonth && month.toLowerCase().includes(reportingMonth.toLowerCase());
+
+            // Check for Y1 suffix in the month key itself
+            const isY1 = month.includes('Y1');
+            const cleanMonth = month.replace(' Y1', '').trim();
+            const isReportingMonth = reportingMonth && cleanMonth.toLowerCase().includes(reportingMonth.toLowerCase()) && !isY1;
 
             if (notLive) {
                 notLiveSessionMonths.push({ hsf: m.hsfName, month: month });

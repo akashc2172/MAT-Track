@@ -507,18 +507,23 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
         return 'No action needed';
     };
 
-    const copyGeneral = (text, key) => {
-        navigator.clipboard.writeText(text);
-        if (key) {
-            setJustCopied(key);
-            setTimeout(() => setJustCopied(null), 2000);
+    const copyGeneral = async (text, key) => {
+        try {
+            await navigator.clipboard.writeText(text);
+            if (key) {
+                setJustCopied(key);
+                setTimeout(() => setJustCopied(null), 2000);
+            }
+        } catch (err) {
+            console.error("Failed to copy to clipboard:", err);
+            alert("Clipboard copy failed. Please try again or copy manually.");
         }
     };
 
     const copyToClipboardAndMarkContacted = async (text, email) => {
-        navigator.clipboard.writeText(text);
-
         try {
+            await navigator.clipboard.writeText(text);
+
             await db.afs.update(email, {
                 last_contact_date: new Date().toISOString()
             });
@@ -537,7 +542,8 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                 });
             }, 3000);
         } catch (err) {
-            console.error("Could not update last_contact_date", err);
+            console.error("Could not update last_contact_date or copy to clipboard", err);
+            alert("Copy failed. Please try again.");
         }
     };
 
@@ -986,8 +992,12 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                                                 </div>
 
                                                 <div style={{ display: 'flex', gap: '8px' }}>
-                                                    <button className="btn" onClick={() => copyToClipboardAndMarkContacted(strictMsg, af.email)} style={{ fontSize: '11px', padding: '6px 12px' }} disabled={!!msgValidation}>
-                                                        <Copy size={12} /> Copy Message
+                                                    <button className="btn" onClick={() => copyGeneral(strictMsg, `btn-msg-${af.email}`)} style={{
+                                                        fontSize: '11px', padding: '6px 12px',
+                                                        background: justCopied === `btn-msg-${af.email}` ? 'var(--success)' : '',
+                                                        color: justCopied === `btn-msg-${af.email}` ? '#fff' : ''
+                                                    }} disabled={!!msgValidation}>
+                                                        {justCopied === `btn-msg-${af.email}` ? <><CheckCircle size={12} /> Copied!</> : <><Copy size={12} /> Copy Message</>}
                                                     </button>
                                                     <button
                                                         className={`btn ${isSuccess ? 'success' : 'btn-primary'}`}
