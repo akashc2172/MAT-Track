@@ -389,7 +389,8 @@ export function calculateDynamicMetrics(af, reportingMonth) {
         if (isExcluded(status)) return;
         totalWebinars += 1;
         const completed = isCompleted(status);
-        const isReportingMonth = reportingMonth && name.toLowerCase().includes(reportingMonth.toLowerCase());
+        const reportingMonthName = reportingMonth ? reportingMonth.split(' ')[0] : '';
+        const isReportingMonth = reportingMonthName && name.toLowerCase().includes(reportingMonthName.toLowerCase());
 
         if (completed) {
             completedWebinars += 1;

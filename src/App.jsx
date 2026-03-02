@@ -46,6 +46,15 @@ function App() {
   useEffect(() => { localStorage.setItem('databallr_month', reportingMonth); }, [reportingMonth]);
   useEffect(() => { localStorage.setItem('databallr_filters', JSON.stringify(filters)); }, [filters]);
 
+  // Auto-resync stored data on load to apply latest parsing logic
+  const [hasResynced, setHasResynced] = useState(false);
+  useEffect(() => {
+    if (!hasResynced && persistedSources && persistedSources.length > 0) {
+      setHasResynced(true);
+      handleSyncEngine(persistedSources);
+    }
+  }, [persistedSources, hasResynced]);
+
   // Helper function for tab switching with gating modal logic
   const handleTabSwitch = (tab) => {
     if (tab === 'outreach') {
