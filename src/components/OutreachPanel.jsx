@@ -8,6 +8,7 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
     const [subject, setSubject] = useState("Missing Requirements Update");
     const [cc, setCc] = useState("");
     const [recentlyCopied, setRecentlyCopied] = useState(new Set());
+    const [justCopied, setJustCopied] = useState(null); // format: "type-email"
     const [showExportModal, setShowExportModal] = useState(false);
     const textareaRef = useRef(null);
 
@@ -506,8 +507,12 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
         return 'No action needed';
     };
 
-    const copyGeneral = (text) => {
+    const copyGeneral = (text, key) => {
         navigator.clipboard.writeText(text);
+        if (key) {
+            setJustCopied(key);
+            setTimeout(() => setJustCopied(null), 2000);
+        }
     };
 
     const copyToClipboardAndMarkContacted = async (text, email) => {
@@ -833,8 +838,34 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                                                 <span style={{ fontSize: '10px', background: String(af.qa_status).includes('Not') ? 'rgba(239, 68, 68, 0.2)' : 'var(--bg-main)', color: String(af.qa_status).includes('Not') ? 'var(--danger)' : 'var(--text-muted)', padding: '2px 6px', borderRadius: '4px' }}>QA: {af.qa_status}</span>
                                             </div>
                                             <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px', display: 'flex', gap: '12px' }}>
-                                                {hasPhone && <span style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={() => copyGeneral(af.mobile)} title="Copy Phone"><Smartphone size={10} /> {af.mobile}</span>}
-                                                <span style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={() => copyGeneral(af.email)} title="Copy Email"><Mail size={10} /> {af.email}</span>
+                                                {hasPhone && (
+                                                    <span
+                                                        style={{
+                                                            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px',
+                                                            background: justCopied === `phone-${af.email}` ? 'var(--success)' : 'var(--bg-main)',
+                                                            color: justCopied === `phone-${af.email}` ? '#fff' : 'var(--text-muted)',
+                                                            padding: '2px 8px', borderRadius: '4px', border: '1px solid var(--border-color)',
+                                                            transition: 'all 0.2s ease'
+                                                        }}
+                                                        onClick={() => copyGeneral(af.mobile, `phone-${af.email}`)}
+                                                        title="Copy Phone"
+                                                    >
+                                                        {justCopied === `phone-${af.email}` ? <><CheckCircle size={10} /> Copied!</> : <><Smartphone size={10} /> {af.mobile}</>}
+                                                    </span>
+                                                )}
+                                                <span
+                                                    style={{
+                                                        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px',
+                                                        background: justCopied === `email-${af.email}` ? 'var(--success)' : 'var(--bg-main)',
+                                                        color: justCopied === `email-${af.email}` ? '#fff' : 'var(--text-muted)',
+                                                        padding: '2px 8px', borderRadius: '4px', border: '1px solid var(--border-color)',
+                                                        transition: 'all 0.2s ease'
+                                                    }}
+                                                    onClick={() => copyGeneral(af.email, `email-${af.email}`)}
+                                                    title="Copy Email"
+                                                >
+                                                    {justCopied === `email-${af.email}` ? <><CheckCircle size={10} /> Copied!</> : <><Mail size={10} /> {af.email}</>}
+                                                </span>
                                             </div>
                                         </div>
                                     </div>
