@@ -695,7 +695,7 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                                     style={{ cursor: 'pointer' }}
                                 />
                                 <label htmlFor="global_hsf_toggle" style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-primary)', cursor: 'pointer' }}>
-                                    Show student names in parentheses (e.g. "March session (John Doe)")
+                                    Show student names in parentheses (e.g. "March session (BEAN BAG)")
                                 </label>
                             </div>
 
