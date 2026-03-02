@@ -332,8 +332,11 @@ export function calculateDynamicMetrics(af, reportingMonth) {
         Object.entries(m.statuses).forEach(([month, status]) => {
             if (isExcluded(status)) return;
 
-            // Only count if this month is ON or AFTER the relationship started
-            const statusOrdinal = getStatusMonthOrdinal(month);
+            // Check for Y1 suffix in the month key itself
+            const isY1 = month.includes('Y1');
+            const cleanMonth = month.replace(' Y1', '').trim();
+
+            const statusOrdinal = getStatusMonthOrdinal(cleanMonth, isY1);
             if (m.startOrdinal > 0 && statusOrdinal > 0 && statusOrdinal < m.startOrdinal) {
                 return; // Exclude prior months from denominator
             }
@@ -342,16 +345,11 @@ export function calculateDynamicMetrics(af, reportingMonth) {
             const completed = isCompleted(status);
             const notLive = isNotLive(status);
 
-            // Check for Y1 suffix in the month key itself
-            const isY1 = month.includes('Y1');
-            const cleanMonth = month.replace(' Y1', '').trim();
-            const isReportingMonth = reportingMonth && cleanMonth.toLowerCase().includes(reportingMonth.toLowerCase()) && !isY1;
-
             if (notLive) {
                 notLiveSessionMonths.push({ hsf: m.hsfName, month: month });
                 if (isReportingMonth) {
                     notLiveMonthSessions += 1;
-                } else if (statusOrdinal > 0 && statusOrdinal < getStatusMonthOrdinal(reportingMonth)) {
+                } else if (statusOrdinal > 0 && statusOrdinal < getStatusMonthOrdinal(reportingMonth, false)) {
                     notLivePastSessionsCount += 1;
                 }
             }
@@ -362,7 +360,7 @@ export function calculateDynamicMetrics(af, reportingMonth) {
                 missingSessionMonths.push({ hsf: m.hsfName, month: month });
                 if (isReportingMonth) {
                     missingMonthSessions += 1;
-                } else if (statusOrdinal > 0 && statusOrdinal < getStatusMonthOrdinal(reportingMonth)) {
+                } else if (statusOrdinal > 0 && statusOrdinal < getStatusMonthOrdinal(reportingMonth, false)) {
                     missingPastSessionsCount += 1;
                 }
             }
