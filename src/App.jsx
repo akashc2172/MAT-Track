@@ -18,6 +18,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [showOutreachModal, setShowOutreachModal] = useState(false);
+  const [showAllManual, setShowAllManual] = useState(false);
   const [showDataSourcesModal, setShowDataSourcesModal] = useState(false);
   const [uploads, setUploads] = useState({
     haf: null, qa: null, session: null, afm: null, webinar: null
@@ -336,19 +337,30 @@ function App() {
                 <p style={{ color: 'var(--text-muted)', fontSize: '14px', lineHeight: 1.5, marginBottom: '16px' }}>
                   You have manually selected the following {filters.manualSelected.length} AFs:
                 </p>
-                <div style={{ background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '12px', textAlign: 'left', marginBottom: '24px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
-                  {filters.manualSelected.slice(0, 15).map(email => {
+                <div style={{ background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '12px', textAlign: 'left', marginBottom: '24px', display: 'grid', gridTemplateColumns: showAllManual ? 'repeat(auto-fit, minmax(140px, 1fr))' : '1fr 1fr', gap: '4px', maxHeight: showAllManual ? '60vh' : 'auto', overflowY: showAllManual ? 'auto' : 'visible' }}>
+                  {filters.manualSelected.slice(0, showAllManual ? filters.manualSelected.length : 15).map(email => {
                     const af = activeAfs?.find(a => a.email === email);
                     return (
                       <div key={email} style={{ padding: '2px 4px', fontSize: '12px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--accent-cyan)', flexShrink: 0 }}></div>
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{af ? af.fullName : email}</span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }} title={af ? af.fullName : email}>{af ? af.fullName : email}</span>
                       </div>
                     );
                   })}
-                  {filters.manualSelected.length > 15 && (
-                    <div style={{ padding: '2px 4px', fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px', fontStyle: 'italic' }}>
-                      ...and {filters.manualSelected.length - 15} more
+                  {!showAllManual && filters.manualSelected.length > 15 && (
+                    <div
+                      onClick={() => setShowAllManual(true)}
+                      style={{ padding: '2px 4px', fontSize: '11px', color: 'var(--accent-cyan)', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: 'bold' }}
+                    >
+                      ...and {filters.manualSelected.length - 15} more (click to expand)
+                    </div>
+                  )}
+                  {showAllManual && filters.manualSelected.length > 15 && (
+                    <div
+                      onClick={() => setShowAllManual(false)}
+                      style={{ padding: '2px 4px', fontSize: '11px', color: 'var(--accent-cyan)', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: 'bold', gridColumn: '1 / -1', marginTop: '8px', borderTop: '1px solid var(--border-color)', paddingTop: '8px' }}
+                    >
+                      Show less
                     </div>
                   )}
                 </div>
