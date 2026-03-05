@@ -195,6 +195,14 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
         let msg = message;
         const currentHSFVisibility = individualHSFOverrides[af.email] ?? showHSFNames;
 
+        const monthOrder = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const sortMonths = (a, b) => {
+            const [mA, yA] = a.split(' ');
+            const [mB, yB] = b.split(' ');
+            if (yA && yB && yA !== yB) return parseInt(yA) - parseInt(yB);
+            return monthOrder.indexOf(mA) - monthOrder.indexOf(mB);
+        };
+
         if (!strict) {
             msg = '{MissingSummary}';
         }
@@ -332,13 +340,12 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
             let finalSummary = '';
             let baseClauses = [];
 
-            if (sessionMonthsArr.length === 1 && notLiveMonthsArr.length === 0 && friendlyWebinars.length === 1 && rawWebinars.length === 0 && sessionMonthsArr[0] === friendlyWebinars[0] && actionClauses.length === 0) {
+            if (sessionMonthsArr.length === 1 && notLiveMonthsArr.length === 0 && friendlyWebinars.length === 1 && rawWebinars.length === 0 && sessionMonthsArr[0].split(' ')[0] === friendlyWebinars[0] && actionClauses.length === 0) {
                 // Same-month Optimization
-                const m = sessionMonthsArr[0];
-                const yearStr = ` ${getYearForMonth(m)}`;
+                const m = sessionMonthsArr[0]; // e.g. "March 2026"
                 const hsfs = Array.from(sessionMap[m] || []).filter(Boolean).sort();
                 const hsfStr = (currentHSFVisibility && hsfs.length > 0) ? ` (${hsfs.join(', ')})` : '';
-                baseClauses.push(`your ${m}${yearStr}${hsfStr} session summary and webinar`);
+                baseClauses.push(`your ${m}${hsfStr} session summary and webinar`);
             } else {
                 const sessionSummaryStr = sessionMonthsArr.length > 0 ? `your ${formatSessionMonthList(sessionMap, currentHSFVisibility)} session ${sessionMonthsArr.length > 1 ? 'summaries' : 'summary'}` : '';
                 const notLiveSummaryStr = notLiveMonthsArr.length > 0 ? `your ${formatSessionMonthList(notLiveMap, currentHSFVisibility)} session ${notLiveMonthsArr.length > 1 ? 'summaries' : 'summary'} marked Completed - Not Live` : '';
