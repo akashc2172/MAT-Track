@@ -156,6 +156,18 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
         }).map(d => d.email).filter(Boolean).join(', ');
     };
 
+    const getPhoneNumbersList = () => {
+        return filteredData
+            .filter(d => {
+                const isMissingStandard = !getReplacedMessage(d, false).includes('[NO MISSING OBLIGATIONS MATCHING FILTERS]');
+                const hasNeedsAttention = isMissingStandard || (d.action_flags || []).some(f => f.type === 'session_not_live');
+                return hasNeedsAttention;
+            })
+            .map(d => d.mobile ? String(d.mobile).replace(/\D/g, '') : '')
+            .filter(Boolean)
+            .join(', ');
+    };
+
     const formatMonthList = (months) => {
         if (!months || months.length === 0) return '';
         const mOrder = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -1076,6 +1088,9 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
                         </button>
                         <button className="btn" onClick={() => copyGeneral(message)} style={{ justifyContent: 'center' }}>
                             <Copy size={16} /> Copy Template Body
+                        </button>
+                        <button className="btn" onClick={() => copyGeneral(getPhoneNumbersList())} style={{ justifyContent: 'center' }}>
+                            <Smartphone size={16} /> Copy Phone Numbers
                         </button>
                     </div>
                 </div>
