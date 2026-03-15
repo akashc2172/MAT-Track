@@ -165,7 +165,7 @@ export default function OutreachPanel({ data, filters, reportingMonth }) {
             })
             .map(d => d.mobile ? String(d.mobile).replace(/\D/g, '') : '')
             .filter(Boolean)
-            .join(', ');
+            .join('\n');
     };
 
     const formatMonthList = (months) => {
